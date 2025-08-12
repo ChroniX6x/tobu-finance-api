@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "tsx watch src/server.ts",
     "migrate": "ts-node src/migrate.ts up",
     "migrate:up": "ts-node src/migrate.ts up",
     "migrate:down": "ts-node src/migrate.ts down",
@@ -11,8 +11,9 @@
     "migrate:list": "ts-node src/migrate.ts list",
     "migrate:create": "ts-node scripts/new-migration.ts",
     "build": "tsc -p .",
-    "start": "NODE_ENV=production node dist/server.js",
-    "seed": "ts-node-dev --transpile-only scripts/seed.ts"
+    "start": "set NODE_ENV=production&& node dist/src/server.js",
+    "seed": "ts-node-dev --transpile-only scripts/seed.ts",
+    "mongod": "mongod --dbpath 'D:/mogodb/db'"
   },
   "keywords": [],
   "author": "",
@@ -34,6 +35,7 @@
     "@types/node": "^24.2.1",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "tsx": "^4.20.4",
     "typescript": "^5.9.2"
   }
 }

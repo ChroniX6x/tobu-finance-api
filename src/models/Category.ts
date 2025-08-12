@@ -1,5 +1,5 @@
 import { Schema, model } from "mongoose";
-import { SplitSchema } from "./common";
+import { SplitSchema } from "./common.js";
 
 
 const CategorySchema = new Schema(

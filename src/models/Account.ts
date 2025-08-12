@@ -12,7 +12,7 @@ const AccountSchema = new Schema(
   {
     _id: { type: String, alias: "id" },
     name: { type: String, required: true },
-    memberIds: [{ type: String, required: true }],
+    members: [{ type: String, required: true }],
     balances: [BalanceSchema],
     monthlyIncomes: [MonthlyIncomeSchema],
     monthlyPlannedContributions: [PlannedContributionSchema],

@@ -4,13 +4,13 @@
       "id": "m1",
       "name": "Tony",
       "email": "tony@example.com",
-      "userID": "u1"
+      "user": "u1"
     },
     {
       "id": "m2",
       "name": "Caro",
       "email": "caro@example.com",
-      "userID": "u2"
+      "user": "u2"
     },
     {
       "id": "4a7b",
@@ -27,9 +27,9 @@
     {
       "id": "a1",
       "name": "Gemeinschaftskonto",
-      "memberIds": [
-        "b1",
-        "b2"
+      "members": [
+        "m1",
+        "m2"
       ],
       "balances": [
         {
@@ -154,7 +154,7 @@
     {
       "id": "d52a",
       "name": "Account",
-      "memberIds": [
+      "members": [
         "4a7b",
         "b4c4"
       ],
