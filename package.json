@@ -4,16 +4,16 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "migrate": "ts-node src/migrate.ts up",
-    "migrate:up": "ts-node src/migrate.ts up",
-    "migrate:down": "ts-node src/migrate.ts down",
-    "migrate:pending": "ts-node src/migrate.ts pending",
-    "migrate:list": "ts-node src/migrate.ts list",
-    "migrate:create": "ts-node scripts/new-migration.ts",
+    "migrate": "tsx src/migrate.ts up",
+    "migrate:up": "tsx src/migrate.ts up",
+    "migrate:down": "tsx src/migrate.ts down",
+    "migrate:pending": "tsx src/migrate.ts pending",
+    "migrate:list": "tsx src/migrate.ts list",
+    "migrate:create": "tsx scripts/new-migration.ts",
     "build": "tsc -p .",
     "start": "set NODE_ENV=production&& node dist/src/server.js",
     "seed": "ts-node-dev --transpile-only scripts/seed.ts",
-    "mongod": "mongod --dbpath 'D:/mogodb/db'"
+    "mongod": "mongod --dbpath D:\\mogodb\\db"
   },
   "keywords": [],
   "author": "",
