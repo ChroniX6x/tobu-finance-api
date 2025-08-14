@@ -79,7 +79,8 @@ async function createIndexes(db: Db) {
   await db.collection("categories").createIndex({ accountId: 1, name: 1 });
 }
 
-export const up = async ({ db }: MigrationCtx) => {
+export const up = async ({context}: any) => {
+  const db = context.db;
   // ---- v1 Collection-Namen erkennen
   const v1MembersName = (await hasCollection(db, "members"))
     ? "members"
@@ -431,7 +432,8 @@ export const up = async ({ db }: MigrationCtx) => {
   console.log("Up-Migration abgeschlossen.");
 };
 
-export const down = async ({ db }: MigrationCtx) => {
+export const down = async ({context}: any) => {
+  const db = context.db;
   // jüngstes Backup ermitteln
   const all = await db.listCollections().toArray();
   const suffixes = all
