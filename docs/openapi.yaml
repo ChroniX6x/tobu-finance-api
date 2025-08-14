@@ -79,12 +79,13 @@ paths:
         '204': { description: Deleted }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /api/accounts:
+    /api/accounts:
     get:
       summary: List accounts
       parameters:
         - in: query
           name: memberId
+          description: Optional filter to return accounts where this member participates
           schema: { $ref: '#/components/schemas/ObjectId' }
       responses:
         '200':
@@ -111,6 +112,15 @@ paths:
   /api/accounts/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
+    get:
+      summary: Get account by id
+      responses:
+        '200':
+          description: Account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+        '404': { $ref: '#/components/responses/NotFound' }
     patch:
       summary: Update account
       requestBody:
@@ -124,6 +134,65 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Account' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/accounts/{id}/expanded:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      summary: Get account with resolved dependencies
+      parameters:
+        - in: query
+          name: include
+          description: Comma-separated list of relations to include
+          schema:
+            type: string
+            example: "members,categories,transactions"
+        - in: query
+          name: from
+          schema: { $ref: '#/components/schemas/Month' }
+        - in: query
+          name: to
+          schema: { $ref: '#/components/schemas/Month' }
+        - in: query
+          name: status
+          description: Only applies to include=transactions
+          schema:
+            type: string
+            enum: [booked, pending]
+      responses:
+        '200':
+          description: Expanded account bundle
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account: { $ref: '#/components/schemas/Account' }
+                  members:
+                    type: array
+                    items: { $ref: '#/components/schemas/Member' }
+                  categories:
+                    type: array
+                    items: { $ref: '#/components/schemas/Category' }
+                  transactions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Transaction' }
+                  memberIncomes:
+                    type: array
+                    items: { $ref: '#/components/schemas/MemberIncome' }
+                  carryovers:
+                    type: array
+                    items: { $ref: '#/components/schemas/CarryOver' }
+                  accountBalances:
+                    type: array
+                    items: { $ref: '#/components/schemas/AccountBalance' }
+                  categoryBudgets:
+                    type: array
+                    items: { $ref: '#/components/schemas/CategoryBudget' }
+                  recurrences:
+                    type: array
+                    items: { $ref: '#/components/schemas/Recurrence' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /api/accounts/{id}/members:
@@ -584,6 +653,37 @@ paths:
       responses:
         '204': { description: Deleted }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/dashboard/accounts:
+    get:
+      summary: Dashboard accounts for a user/member
+      description: Returns compact cards for all accounts where the user participates (via members).
+      parameters:
+        - in: query
+          name: userId
+          description: Resolve all memberIds of this user and return their accounts
+          schema: { $ref: '#/components/schemas/ObjectId' }
+        - in: query
+          name: memberId
+          description: Return accounts where this memberId participates (alternative to userId)
+          schema: { $ref: '#/components/schemas/ObjectId' }
+        - in: query
+          name: months
+          description: Number of months in balanceHistory (oldest->newest)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 24
+            default: 5
+      responses:
+        '200':
+          description: Dashboard accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardAccount'
+
 
 components:
   parameters:
@@ -857,3 +957,28 @@ components:
           type: object
           properties:
             legacyTopUpDate: { type: string, nullable: true }
+    DashboardAccount:
+      type: object
+      required: [id, name, memberCount, currentBalance, balanceHistory]
+      properties:
+        id:
+          type: string
+          description: Account ObjectId (string)
+          example: "60d21b4667d0d8992e610c85"
+        name:
+          type: string
+          nullable: true
+        memberCount:
+          type: integer
+          minimum: 0
+        currentBalance:
+          type: integer
+          description: Closing balance of the latest month in cents
+          example: 123456
+        balanceHistory:
+          type: array
+          description: Monthly closing balances in cents, oldest to newest
+          items:
+            type: integer
+          example: [100000, 105000, 99000, 120000, 123456]
+
