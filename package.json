@@ -15,7 +15,6 @@
     "seed": "ts-node-dev --transpile-only scripts/seed.ts",
     "mongod": "mongod --dbpath D:\\mogodb\\db",
     "revert": "tsx scripts/revertHalfMigration.ts"
-
   },
   "keywords": [],
   "author": "",
@@ -27,7 +26,9 @@
     "mongodb": "^6.18.0",
     "mongoose": "^8.17.1",
     "morgan": "^1.10.1",
+    "swagger-ui-express": "^5.0.1",
     "umzug": "^3.8.2",
+    "yaml": "^2.8.1",
     "zod": "^4.0.17"
   },
   "devDependencies": {
@@ -35,6 +36,7 @@
     "@types/express": "^5.0.3",
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.2.1",
+    "@types/swagger-ui-express": "^4.1.8",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.20.4",

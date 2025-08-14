@@ -1,30 +1,20 @@
-import { Schema, model } from "mongoose";
-import {
-  BalanceSchema,
-  MonthlyIncomeSchema,
-  PlannedContributionSchema,
-  AdditionalContributionSchema,
-  CarryOverSchema,
-  TopUpSchema
-} from "./common.js";
-
+import { Schema, model, Types } from "mongoose";
+const MemberRefSchema = new Schema(
+  {
+    memberId: { type: Types.ObjectId, required: true, ref: "Member" },
+    role: { type: String, enum: ["owner","member"], default: "member" }
+  },
+  { _id: false }
+);
 const AccountSchema = new Schema(
   {
-    _id: { type: String, alias: "id" },
-    name: { type: String, required: true },
-    members: [{ type: String, required: true }],
-    balances: [BalanceSchema],
-    monthlyIncomes: [MonthlyIncomeSchema],
-    monthlyPlannedContributions: [PlannedContributionSchema],
-    additionalContributions: [AdditionalContributionSchema],
-    carryOverBalances: [CarryOverSchema],
-    topUps: [TopUpSchema]
+    name: { type: String, default: null },
+    currency: { type: String, default: "EUR" },
+    members: { type: [MemberRefSchema], default: [] },
+    settings: {
+      monthGranularity: { type: String, default: "YYYY-MM" }
+    }
   },
   { timestamps: true, versionKey: false }
 );
-
-AccountSchema.index({ "balances.month": 1 });
-AccountSchema.index({ "monthlyIncomes.startMonth": 1 });
-
-export type AccountDoc = any;
-export default model<AccountDoc>("Account", AccountSchema, "accounts");
+export default model("Account", AccountSchema, "accounts");

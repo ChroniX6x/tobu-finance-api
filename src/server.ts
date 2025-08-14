@@ -3,13 +3,21 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import { connectDB } from "./db.js";
-import membersRouter from "./routes/members.js";
-import accountsRouter from "./routes/accounts.js";
-import categoriesRouter from "./routes/categories.js";
-import transactionsRouter from "./routes/transactions.js";
-import templatesRouter from "./routes/templates.js";
-import { Umzug, MongoDBStorage } from "umzug";
+
+import members from "./routes/members.js";
+import accounts from "./routes/accounts.js";
+import categories from "./routes/categories.js";
+import transactions from "./routes/transactions.js";
+import recurrences from "./routes/recurrences.js";
+import memberIncomes from "./routes/member-incomes.js";
+import rules from "./routes/contribution-rules.js";
+import carryovers from "./routes/carryovers.js";
+import balances from "./routes/account-balances.js";
+import budgets from "./routes/category-budgets.js";
+import errorHandler from "./middleware/error.js";
 import { MongoClient } from "mongodb";
+import { MongoDBStorage, Umzug } from "umzug";
+import docsRouter from "./docs/swagger.js";
 
 const umzugLogger = {
     debug: (...a: any) => console.debug("[umzug]", ...a),
@@ -24,13 +32,19 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan("dev"));
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req,res)=>res.json({ok:true}));
 
-app.use("/api/members", membersRouter);
-app.use("/api/accounts", accountsRouter);
-app.use("/api/categories", categoriesRouter);
-app.use("/api/transactions", transactionsRouter);
-app.use("/api/templates", templatesRouter);
+app.use("/api/members", members);
+app.use("/api/accounts", accounts);
+app.use("/api/categories", categories);
+app.use("/api/transactions", transactions);
+app.use("/api/recurrences", recurrences);
+app.use("/api/member-incomes", memberIncomes);
+app.use("/api/contribution-rules", rules);
+app.use("/api/carryovers", carryovers);
+app.use("/api/account-balances", balances);
+app.use("/api/category-budgets", budgets);
+app.use(docsRouter); // stellt /docs und /openapi.json bereit
 
 app.get("/health/migrations", async (_req, res) => {
     const client = new MongoClient(process.env.MONGODB_URI!);
@@ -49,13 +63,9 @@ app.get("/health/migrations", async (_req, res) => {
     res.json({ pending: pending.map(m => m.name) });
 });
 
-const port = Number(process.env.PORT || 4000);
+app.use(errorHandler);
 
-connectDB(process.env.MONGODB_URI || "")
-    .then(() => {
-        app.listen(port, () => console.log(`API listening on :${port}`));
-    })
-    .catch((err) => {
-        console.error("DB connect error:", err);
-        process.exit(1);
-    });
+const port = Number(process.env.PORT || 4000);
+connectDB(process.env.MONGODB_URI || "").then(() =>
+  app.listen(port, () => console.log(`API on :${port}`))
+);

@@ -1,26 +1,16 @@
-import { Schema, model } from "mongoose";
-import { SplitSchema } from "./common.js";
-
-
+import { Schema, model, Types } from "mongoose";
+const SplitSchema = new Schema(
+  { memberId: { type: Types.ObjectId, required: true, ref: "Member" },
+    split: { type: Number, min: 0, max: 100, required: true } },
+  { _id: false }
+);
 const CategorySchema = new Schema(
   {
-    _id: { type: String, alias: "id" },
-    accountId: { type: String, required: true },
-    name: { type: String, required: true },
-    // ALT: Mixed → NEU: Array von Splits + Summe=100 Validierung
-    customSplit: {
-      type: [SplitSchema],
-      validate: {
-        validator: (arr: any[]) =>
-          !arr?.length || Math.abs(arr.reduce((s, x) => s + (x?.split ?? 0), 0) - 100) < 1e-6,
-        message: "customSplit must sum to 100."
-      }
-    }
+    accountId: { type: Types.ObjectId, required: true, ref: "Account" },
+    name: { type: String, default: null },
+    customSplit: { type: [SplitSchema], default: [] }
   },
   { timestamps: true, versionKey: false }
 );
-
-CategorySchema.index({ accountId: 1 });
-
-export type CategoryDoc = any;
-export default model<CategoryDoc>("Category", CategorySchema, "categories");
+CategorySchema.index({ accountId: 1, name: 1 });
+export default model("Category", CategorySchema, "categories");

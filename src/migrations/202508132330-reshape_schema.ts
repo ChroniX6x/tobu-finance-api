@@ -30,13 +30,36 @@ const nowTs = () => new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14
 function monthToISODate(s?: string | null): Date | null {
   if (!s) return null;
   const [y, m] = s.split("-").map(Number);
+  if (!y || !m) return null;
   return new Date(Date.UTC(y, m - 1, 1));
 }
-function centsFromEuro(n: number | string): number {
-  const num = Number(n);
-  if (Number.isNaN(num)) throw new Error(`Invalid amount: ${n}`);
-  return Math.round(num * 100);
+
+// Robuste Cent-Konvertierung mit Fallback 0 + Logging
+function centsOrZero(value: any, label: string): number {
+  if (value === null || value === undefined || value === "") {
+    console.warn(`[${MIG_NAME}] WARN amount missing at ${label} → defaulting to 0`);
+    return 0;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      console.warn(`[${MIG_NAME}] WARN amount not finite at ${label}: ${value} → defaulting to 0`);
+      return 0;
+    }
+    return Math.round(value * 100);
+  }
+  if (typeof value === "string") {
+    const cleaned = value.replace(",", ".").replace(/[^\d.\-+eE]/g, "");
+    const num = Number(cleaned);
+    if (!Number.isFinite(num)) {
+      console.warn(`[${MIG_NAME}] WARN amount not parsable at ${label}: "${value}" → defaulting to 0`);
+      return 0;
+    }
+    return Math.round(num * 100);
+  }
+  console.warn(`[${MIG_NAME}] WARN amount invalid type at ${label}: ${JSON.stringify(value)} → defaulting to 0`);
+  return 0;
 }
+
 async function hasCollection(db: Db, name: string) {
   const found = await db.listCollections({ name }).toArray();
   return found.length > 0;
@@ -102,21 +125,21 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
   }
   const hasTemplates = await hasCollection(db, "transactionTemplates");
 
-  // Namensfunktionen
-  const BK = (n: string) => `${n}_v1bk_${ts}`;     // Backup-Kopien
-  const NEW = (n: string) => `__new__${n}_${ts}`;   // Temp-Targets
-  const OLD = (n: string) => `${n}_v1old_${ts}`;    // Originale nach Swap
+  // *** Namensfunktionen mit gewünschtem Tausch ***
+  // v1old_<ts> = Start-Snapshot
+  const OLD = (n: string) => `${n}_v1old_${ts}`;
+  // v1bk_<ts>  = Original direkt vor dem Swap
+  const BK  = (n: string) => `${n}_v1bk_${ts}`;
+  // Temp
+  const NEW = (n: string) => `__new__${n}_${ts}`;
 
-  // Mappings
   const memberIdMap = new Map<string, ObjectId>();
   const accountIdMap = new Map<string, ObjectId>();
   const categoryIdMap = new Map<string, ObjectId>();
   const recurrenceIdMap = new Map<string, ObjectId>();
 
-  // Was wurde schon geswapped? (für Rollback)
   let swappedSome: string[] = [];
 
-  // Rollback nur bei Fehler (inkl. Backup-Löschung on-error)
   const rollback = async (err: any) => {
     console.warn(`[${MIG_NAME}] Rolling back due to error:`, err?.message || err);
     try {
@@ -124,31 +147,29 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
       for (const n of FINAL_NAMES) await dropIf(db, NEW(n));
       const allNow = await db.listCollections().toArray();
       for (const { name } of allNow) {
-        if (name.startsWith("__new__") || name.startsWith("__tmp_revert_")) {
-          await dropIf(db, name);
-        }
+        if (name.startsWith("__new__") || name.startsWith("__tmp_revert_")) await dropIf(db, name);
       }
-      // Geswappte wiederherstellen
+      // Falls beim Swap schon etwas umbenannt wurde: zurückholen
       for (const n of swappedSome.reverse()) {
         const finalExists = await hasCollection(db, n);
-        const oldExists = await hasCollection(db, OLD(n));
-        if (finalExists && oldExists) {
+        const bkExists = await hasCollection(db, BK(n));
+        if (finalExists && bkExists) {
           const tmp = `__tmp_revert_${n}_${ts}`;
           await safeRename(db, n, tmp);
-          await safeRename(db, OLD(n), n);
+          await safeRename(db, BK(n), n);
           await dropIf(db, tmp);
-        } else if (!finalExists && oldExists) {
-          await safeRename(db, OLD(n), n);
+        } else if (!finalExists && bkExists) {
+          await safeRename(db, BK(n), n);
         }
       }
-      // Backups nur im Fehlerfall löschen (so gewünscht)
+      // Backups im Fehlerfall löschen? (Default: ja)
       if (!KEEP_BACKUPS_ON_ERROR) {
-        await dropIf(db, BK(v1Members));
-        await dropIf(db, BK("accounts"));
-        await dropIf(db, BK("categories"));
-        await dropIf(db, BK("transactions"));
-        if (hasTemplates) await dropIf(db, BK("transactionTemplates"));
-        for (const n of FINAL_NAMES) await dropIf(db, OLD(n));
+        await dropIf(db, OLD(v1Members));
+        await dropIf(db, OLD("accounts"));
+        await dropIf(db, OLD("categories"));
+        await dropIf(db, OLD("transactions"));
+        if (hasTemplates) await dropIf(db, OLD("transactionTemplates"));
+        // BKs sind Originale vorm Swap – behalten wir i. d. R.
       }
     } catch (e) {
       console.error(`[${MIG_NAME}] Rollback encountered an error:`, e);
@@ -157,12 +178,12 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
   };
 
   try {
-    // 1) Backups als KOPIE (App bleibt auf v1 live)
-    await copyBackup(db, v1Members, BK(v1Members));
-    await copyBackup(db, "accounts", BK("accounts"));
-    await copyBackup(db, "categories", BK("categories"));
-    await copyBackup(db, "transactions", BK("transactions"));
-    if (hasTemplates) await copyBackup(db, "transactionTemplates", BK("transactionTemplates"));
+    // 1) Start-Snapshots als v1old_* (so gewünscht)
+    await copyBackup(db, v1Members, OLD(v1Members));
+    await copyBackup(db, "accounts", OLD("accounts"));
+    await copyBackup(db, "categories", OLD("categories"));
+    await copyBackup(db, "transactions", OLD("transactions"));
+    if (hasTemplates) await copyBackup(db, "transactionTemplates", OLD("transactionTemplates"));
 
     // 2) Temp-Collections anlegen
     for (const n of FINAL_NAMES) {
@@ -171,16 +192,16 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
     }
 
     // 3) Members
-    const v1Mems = await db.collection(BK(v1Members)).find({}).toArray();
+    const v1Mems = await db.collection(OLD(v1Members)).find({}).toArray();
     if (!v1Mems.length) throw new Error("No members found in v1 backup.");
     await db.collection(NEW("members")).insertMany(
       v1Mems.map((m: any) => {
-        const legacy = legacyKeyOf(m);
         const _id = new ObjectId();
-        ensureMap(memberIdMap, legacy, _id);
+        // Map-Key intern behalten (über _id oder id), aber NICHT speichern
+        const mapKey = legacyKeyOf(m);
+        ensureMap(memberIdMap, mapKey, _id);
         return {
           _id,
-          legacyId: legacy,
           name: m.name ?? null,
           email: m.email ?? null,
           userId: m.user ? new ObjectId() : null,
@@ -189,22 +210,21 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
       { ordered: true }
     );
 
-    // 4) Accounts (nur stabile Felder)
-    const v1Accs = await db.collection(BK("accounts")).find({}).toArray();
+    // 4) Accounts
+    const v1Accs = await db.collection(OLD("accounts")).find({}).toArray();
     await db.collection(NEW("accounts")).insertMany(
       v1Accs.map((a: any) => {
-        const legacy = legacyKeyOf(a);
         const _id = new ObjectId();
-        ensureMap(accountIdMap, legacy, _id);
+        const mapKey = legacyKeyOf(a);
+        ensureMap(accountIdMap, mapKey, _id);
         const members = (a.members ?? []).map((raw: any) => {
           const mk = resolveMemberKey(raw);
           const mo = mk ? memberIdMap.get(mk) ?? null : null;
-          if (!mo) console.warn(`Account member unresolved: account=${legacy} member=${String(raw)}`);
+          if (!mo) console.warn(`Account member unresolved: accountKey=${mapKey} member=${String(raw)}`);
           return { memberId: mo, role: "owner" };
         });
         return {
           _id,
-          legacyId: legacy,
           name: a.name ?? null,
           currency: "EUR",
           members,
@@ -217,12 +237,12 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
     );
 
     // 5) Categories
-    const v1Cats = await db.collection(BK("categories")).find({}).toArray();
+    const v1Cats = await db.collection(OLD("categories")).find({}).toArray();
     await db.collection(NEW("categories")).insertMany(
       v1Cats.map((c: any) => {
-        const legacy = legacyKeyOf(c);
         const _id = new ObjectId();
-        ensureMap(categoryIdMap, legacy, _id);
+        const mapKey = legacyKeyOf(c);
+        ensureMap(categoryIdMap, mapKey, _id);
         const accKey = keyOf(c.accountId);
         const accId = accKey ? accountIdMap.get(accKey) ?? null : null;
         const customSplit = (c.customSplit ?? []).map((s: any) => {
@@ -231,41 +251,38 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
           if (!mo) console.warn(`Category customSplit unresolved member: ${mk}`);
           return { memberId: mo, split: s.split };
         });
-        return { _id, legacyId: legacy, accountId: accId, name: c.name ?? null, customSplit };
+        return { _id, accountId: accId, name: c.name ?? null, customSplit };
       }),
       { ordered: true }
     );
 
     // 6) Recurrences (aus Templates)
-    if (hasTemplates) {
-      const v1Tpl = await db.collection(BK("transactionTemplates")).find({}).toArray();
-      if (v1Tpl.length) {
-        await db.collection(NEW("recurrences")).insertMany(
-          v1Tpl.map((r: any) => {
-            const legacy = legacyKeyOf(r);
-            const _id = new ObjectId();
-            ensureMap(recurrenceIdMap, legacy, _id);
-            const accKey = keyOf(r.accountId);
-            const catKey = keyOf(r.categoryId);
-            return {
-              _id,
-              legacyId: legacy,
-              accountId: accKey ? accountIdMap.get(accKey) ?? null : null,
-              categoryId: catKey ? categoryIdMap.get(catKey) ?? null : null,
-              title: r.title ?? null,
-              type: r.type,
-              amountCents: centsFromEuro(r.amount),
-              schedule: { freq: "monthly", dayOfMonth: 1 },
-              activeFrom: new Date(),
-              activeUntil: null,
-              createdByMemberId: r.createdBy ? (memberIdMap.get(resolveMemberKey(r.createdBy)!) ?? null) : null,
-              nextPlanned: null,
-              lastEmitted: null,
-            };
-          }),
-          { ordered: true }
-        );
-      }
+    const v1Tpl = hasTemplates ? await db.collection(OLD("transactionTemplates")).find({}).toArray() : [];
+    if (v1Tpl.length) {
+      await db.collection(NEW("recurrences")).insertMany(
+        v1Tpl.map((r: any) => {
+          const _id = new ObjectId();
+          const mapKey = legacyKeyOf(r);
+          ensureMap(recurrenceIdMap, mapKey, _id);
+          const accKey = keyOf(r.accountId);
+          const catKey = keyOf(r.categoryId);
+          return {
+            _id,
+            accountId: accKey ? accountIdMap.get(accKey) ?? null : null,
+            categoryId: catKey ? categoryIdMap.get(catKey) ?? null : null,
+            title: r.title ?? null,
+            type: r.type,
+            amountCents: centsOrZero(r.amount, `recurrences.amount (src=${mapKey})`),
+            schedule: { freq: "monthly", dayOfMonth: 1 },
+            activeFrom: new Date(),
+            activeUntil: null,
+            createdByMemberId: r.createdBy ? (memberIdMap.get(resolveMemberKey(r.createdBy)!) ?? null) : null,
+            nextPlanned: null,
+            lastEmitted: null,
+          };
+        }),
+        { ordered: true }
+      );
     }
 
     // 7) Neben-Collections aus accounts.*
@@ -280,14 +297,30 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
       const accId = accountIdMap.get(accKey)!;
 
       for (const b of a.balances ?? []) {
-        balDocs.push({ _id: new ObjectId(), accountId: accId, month: monthToISODate(b.month), closingBalanceCents: centsFromEuro(b.value) });
+        balDocs.push({
+          _id: new ObjectId(),
+          accountId: accId,
+          month: monthToISODate(b.month),
+          closingBalanceCents: centsOrZero(b.value, `account_balances.closingBalance (accountKey=${accKey}, month=${b.month})`),
+        });
       }
+
       for (const r of a.monthlyIncomes ?? []) {
         const mk = resolveMemberKey(r.memberId);
         const mo = mk ? memberIdMap.get(mk) ?? null : null;
         if (!mo) console.warn(`member_incomes unresolved member: ${mk}`);
-        incDocs.push({ _id: new ObjectId(), accountId: accId, memberId: mo, amountCents: centsFromEuro(r.amount), fromMonth: monthToISODate(r.startMonth), toMonth: r.endMonth ? monthToISODate(r.endMonth) : null, source: "salary", note: null });
+        incDocs.push({
+          _id: new ObjectId(),
+          accountId: accId,
+          memberId: mo,
+          amountCents: centsOrZero(r.amount, `member_incomes.amount (accountKey=${accKey}, member=${mk})`),
+          fromMonth: monthToISODate(r.startMonth),
+          toMonth: r.endMonth ? monthToISODate(r.endMonth) : null,
+          source: "salary",
+          note: null,
+        });
       }
+
       for (const r of a.monthlyPlannedContributions ?? []) {
         const mKey = resolveMemberKey(r.memberId);
         const catKey = keyOf(r.categoryId);
@@ -295,52 +328,85 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
           const mOid = memberIdMap.get(mKey) ?? null;
           if (!mOid) console.warn(`contribution_rules base unresolved member: ${mKey}`);
           contribDocs.push({
-            _id: new ObjectId(), accountId: accId, type: "base", recurring: true, description: "Planned contribution",
-            amountCents: centsFromEuro(r.amount), distribution: { mode: "perMember", memberId: mOid, customSplit: null },
-            fromMonth: monthToISODate(r.startMonth), toMonth: r.endMonth ? monthToISODate(r.endMonth) : null
+            _id: new ObjectId(),
+            accountId: accId,
+            type: "base",
+            recurring: true,
+            description: "Planned contribution",
+            amountCents: centsOrZero(r.amount, `contribution_rules.base.amount (accountKey=${accKey}, member=${mKey})`),
+            distribution: { mode: "perMember", memberId: mOid, customSplit: null },
+            fromMonth: monthToISODate(r.startMonth),
+            toMonth: r.endMonth ? monthToISODate(r.endMonth) : null,
           });
         } else if (catKey) {
           const catOid = categoryIdMap.get(catKey) ?? null;
           budgetDocs.push({
-            _id: new ObjectId(), accountId: accId, categoryId: catOid,
-            amountCents: centsFromEuro(r.amount), fromMonth: monthToISODate(r.startMonth), toMonth: r.endMonth ? monthToISODate(r.endMonth) : null
+            _id: new ObjectId(),
+            accountId: accId,
+            categoryId: catOid,
+            amountCents: centsOrZero(r.amount, `category_budgets.amount (accountKey=${accKey}, category=${catKey})`),
+            fromMonth: monthToISODate(r.startMonth),
+            toMonth: r.endMonth ? monthToISODate(r.endMonth) : null,
           });
         }
       }
+
       for (const r of a.additionalContributions ?? []) {
         const mKey = resolveMemberKey(r.memberId);
         const mOid = mKey ? memberIdMap.get(mKey) ?? null : null;
         if (!mOid) console.warn(`contribution_rules additional unresolved member: ${mKey}`);
         contribDocs.push({
-          _id: new ObjectId(), accountId: accId, type: "additional", recurring: !!r.recurring,
+          _id: new ObjectId(),
+          accountId: accId,
+          type: "additional",
+          recurring: !!r.recurring,
           description: r.description ?? "Additional contribution",
-          amountCents: centsFromEuro(r.amount), distribution: { mode: "perMember", memberId: mOid, customSplit: null },
-          fromMonth: monthToISODate(r.startMonth), toMonth: r.endMonth ? monthToISODate(r.endMonth) : null
+          amountCents: centsOrZero(r.amount, `contribution_rules.additional.amount (accountKey=${accKey}, member=${mKey})`),
+          distribution: { mode: "perMember", memberId: mOid, customSplit: null },
+          fromMonth: monthToISODate(r.startMonth),
+          toMonth: r.endMonth ? monthToISODate(r.endMonth) : null,
         });
       }
+
       for (const c of a.carryOverBalances ?? []) {
         const mKey = resolveMemberKey(c.memberId);
         const mOid = mKey ? memberIdMap.get(mKey) ?? null : null;
         if (!mOid) console.warn(`carryovers unresolved member: ${mKey}`);
         carryDocs.push({
-          _id: new ObjectId(), accountId: accId, memberId: mOid, month: monthToISODate(c.month),
-          amountCents: centsFromEuro(c.amount), reason: "Carryover", createdAt: new Date()
+          _id: new ObjectId(),
+          accountId: accId,
+          memberId: mOid,
+          month: monthToISODate(c.month),
+          amountCents: centsOrZero(c.amount, `carryovers.amount (accountKey=${accKey}, member=${mKey}, month=${c.month})`),
+          reason: "Carryover",
+          createdAt: new Date(),
         });
       }
+
       for (const t of a.topUps ?? []) {
         const hasCustom = Array.isArray(t.customSplit) && t.customSplit.length > 0;
         contribDocs.push({
-          _id: new ObjectId(), accountId: accId, type: "topup", recurring: false, description: t.reason ?? "Top-up",
-          amountCents: centsFromEuro(t.amount),
+          _id: new ObjectId(),
+          accountId: accId,
+          type: "topup",
+          recurring: false,
+          description: t.reason ?? "Top-up",
+          amountCents: centsOrZero(t.amount, `contribution_rules.topup.amount (accountKey=${accKey}, month=${t.month})`),
           distribution: hasCustom
-            ? { mode: "customSplit", memberId: null, customSplit: t.customSplit.map((s: any) => {
-                const mk = resolveMemberKey(s.memberId);
-                const mo = mk ? memberIdMap.get(mk) ?? null : null;
-                if (!mo) console.warn(`topup customSplit unresolved member: ${mk}`);
-                return { memberId: mo, split: s.split };
-              }) }
+            ? {
+                mode: "customSplit",
+                memberId: null,
+                customSplit: t.customSplit.map((s: any) => {
+                  const mk = resolveMemberKey(s.memberId);
+                  const mo = mk ? memberIdMap.get(mk) ?? null : null;
+                  if (!mo) console.warn(`topup customSplit unresolved member: ${mk}`);
+                  return { memberId: mo, split: s.split };
+                }),
+              }
             : { mode: "proRataIncome", memberId: null, customSplit: null },
-          fromMonth: monthToISODate(t.month), toMonth: monthToISODate(t.month), meta: { legacyTopUpDate: t.date ?? null }
+          fromMonth: monthToISODate(t.month),
+          toMonth: monthToISODate(t.month),
+          meta: { legacyTopUpDate: t.date ?? null },
         });
       }
     }
@@ -352,7 +418,7 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
     if (budgetDocs.length) await db.collection(NEW("category_budgets")).insertMany(budgetDocs, { ordered: true });
 
     // 8) Transactions
-    const v1Tx = await db.collection(BK("transactions")).find({}).toArray();
+    const v1Tx = await db.collection(OLD("transactions")).find({}).toArray();
     if (v1Tx.length) {
       await db.collection(NEW("transactions")).insertMany(
         v1Tx.map((t: any) => {
@@ -362,12 +428,11 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
           const recKey = keyOf(t.recurringTemplateId);
           return {
             _id: new ObjectId(),
-            legacyId: legacyKeyOf(t),
             accountId: accKey ? accountIdMap.get(accKey) ?? null : null,
             categoryId: catKey ? categoryIdMap.get(catKey) ?? null : null,
             title: t.title ?? null,
             type: t.type,
-            amountCents: centsFromEuro(t.amount),
+            amountCents: centsOrZero(t.amount, `transactions.amount (txKey=${legacyKeyOf(t)})`),
             month: monthToISODate(t.month),
             bookDate: t.date ? new Date(`${t.date}T00:00:00Z`) : monthToISODate(t.month),
             status: t.status ?? "booked",
@@ -383,13 +448,38 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
     // 9) Indexe auf Temp
     await createIndexes(db, NEW);
 
-    // 10) Swap: Originale -> *_v1old_<ts>, Temps -> Final
+    // 10) Swap: Originale -> *_v1bk_<ts>, Temps -> Final
     for (const n of FINAL_NAMES) {
       if (await hasCollection(db, n)) {
-        await safeRename(db, n, OLD(n));
+        await safeRename(db, n, BK(n));   // Original vor Swap sichern (behalten)
         swappedSome.push(n);
       }
-      await safeRename(db, NEW(n), n);
+      await safeRename(db, NEW(n), n);    // Temp -> Final
+    }
+
+    // 11) Success-Cleanup: Start-Snapshots (v1old) löschen, v1bk behalten
+    try {
+      const dropIfHas = async (name: string) => {
+        if ((await db.listCollections({ name }).toArray()).length) {
+          await db.collection(name).drop();
+        }
+      };
+      await dropIfHas(OLD(v1Members));
+      await dropIfHas(OLD("accounts"));
+      await dropIfHas(OLD("categories"));
+      await dropIfHas(OLD("transactions"));
+      if (hasTemplates) await dropIfHas(OLD("transactionTemplates"));
+
+      // Temp-Reste entfernen
+      const rest = await db.listCollections().toArray();
+      for (const { name } of rest) {
+        if (name.startsWith("__new__") || name.startsWith("__tmp_revert_")) {
+          await db.collection(name).drop();
+        }
+      }
+      console.log(`[${MIG_NAME}] Cleanup: kept *_v1bk_${ts}, dropped *_v1old_${ts}.`);
+    } catch (e) {
+      console.warn(`[${MIG_NAME}] Post-success cleanup warning:`, (e as Error).message);
     }
 
     console.log(`[${MIG_NAME}] Up migration finished successfully.`);
@@ -402,38 +492,58 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
 export const down = async ({ context }: { context: MigrationCtx }) => {
   const { db } = context;
 
-  const colls = await db.listCollections().toArray();
-  const suffixes = colls
-    .map((c) => c.name.match(/_v1bk_(\d{14})$/))
-    .filter(Boolean)
-    .map((m) => (m as RegExpMatchArray)[1])
-    .sort();
-  if (!suffixes.length) {
-    console.log("No v1 backups found — skipping down.");
-    return;
+  // Alle Collection-Namen holen
+  const all = await db.listCollections().toArray();
+  const names = all.map(c => c.name);
+
+  // Helper zum sicheren Rename
+  const safeRen = async (from: string, to: string) => {
+    const exists = names.includes(from) || (await db.listCollections({ name: from }).toArray()).length > 0;
+    if (!exists) return false;
+    if ((await db.listCollections({ name: to }).toArray()).length > 0) {
+      await db.collection(to).drop();
+    }
+    await db.admin().command({ renameCollection: `${db.databaseName}.${from}`, to: `${db.databaseName}.${to}` });
+    return true;
+  };
+
+  // v2-Collections droppen
+  for (const n of FINAL_NAMES) {
+    if (names.includes(n)) await db.collection(n).drop();
   }
-  const latest = suffixes.at(-1)!;
-  const BK = (n: string) => `${n}_v1bk_${latest}`;
-  const OLD = (n: string) => `${n}_v1old_${latest}`;
 
-  // v2 löschen
-  for (const n of FINAL_NAMES) await dropIf(db, n);
+  // Restore-Helfer: bevorzugt v1bk (Original vorm Swap), sonst v1old (Start-Snapshot)
+  const restoreBase = async (base: string) => {
+    // suche neuesten v1bk und v1old
+    const findLatest = (tag: "v1bk" | "v1old") => {
+      const rx = new RegExp(`^${base}_${tag}_(\\d{14})$`);
+      return names
+        .map(n => n.match(rx))
+        .filter(Boolean)
+        .map(m => (m as RegExpMatchArray)[1])
+        .sort()
+        .at(-1);
+    };
+    const tsBk = findLatest("v1bk");
+    if (tsBk) {
+      if (await safeRen(`${base}_v1bk_${tsBk}`, base)) return true;
+    }
+    const tsOld = findLatest("v1old");
+    if (tsOld) {
+      if (await safeRen(`${base}_v1old_${tsOld}`, base)) return true;
+    }
+    return false;
+  };
 
-  // erst Originals aus *_v1old_* falls vorhanden, sonst Backups
   // members kann "members" oder "member" gewesen sein
-  if (await hasCollection(db, OLD("members"))) await safeRename(db, OLD("members"), "members");
-  else if (await hasCollection(db, BK("members"))) await safeRename(db, BK("members"), "members");
-  else if (await hasCollection(db, OLD("member"))) await safeRename(db, OLD("member"), "member");
-  else if (await hasCollection(db, BK("member"))) await safeRename(db, BK("member"), "member");
+  await restoreBase("members") || await restoreBase("member");
 
-  for (const n of ["accounts", "categories", "transactions"]) {
-    if (await hasCollection(db, OLD(n))) await safeRename(db, OLD(n), n);
-    else if (await hasCollection(db, BK(n))) await safeRename(db, BK(n), n);
+  // Basis-Collections
+  for (const b of ["accounts", "categories", "transactions", "transactionTemplates"]) {
+    await restoreBase(b);
   }
-  if (await hasCollection(db, OLD("transactionTemplates"))) await safeRename(db, OLD("transactionTemplates"), "transactionTemplates");
-  else if (await hasCollection(db, BK("transactionTemplates"))) await safeRename(db, BK("transactionTemplates"), "transactionTemplates");
 
-  console.log(`[${MIG_NAME}] Down migration finished (restored v1).`);
+  console.log(`[${MIG_NAME}] Down migration finished (restored from v1bk/v1old).`);
 };
 
 export default { up, down };

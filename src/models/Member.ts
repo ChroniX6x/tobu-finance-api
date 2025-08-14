@@ -1,20 +1,11 @@
-import { Schema, model } from "mongoose";
-
+import { Schema, model, Types } from "mongoose";
 const MemberSchema = new Schema(
   {
-    _id: { type: String, alias: "id" }, // wir nutzen deine String-IDs als _id
-    name: { type: String, required: true },
-    email: { type: String, required: false },
-    user: { type: String, required: false }
+    name: { type: String, default: null },
+    email: { type: String, default: null },
+    userId: { type: Types.ObjectId, default: null } // optional App-User
   },
   { timestamps: true, versionKey: false }
 );
-
-export type MemberDoc = {
-  _id: string;
-  name: string;
-  email?: string;
-  user?: string;
-};
-
-export default model<MemberDoc>("Member", MemberSchema, "member");
+MemberSchema.index({ userId: 1 }, { sparse: true });
+export default model("Member", MemberSchema, "members");
