@@ -1,4 +1,12 @@
 import { Db, MongoClient, ObjectId } from "mongodb";
+import {
+  startMigrationRun,
+  backupCollection,
+  recordValidator,
+  finalizeRun,
+  getLatestRun,
+  restoreRun,
+} from "./backupRegistry";
 
 export type MigrationCtx = { db: Db; client: MongoClient };
 
@@ -170,90 +178,50 @@ const eventsCreateOptions = {
 
 // ------------------------ Migration UP ------------------------
 export const up = async ({ context }: { context: MigrationCtx }) => {
-  const { db } = context;
+  const { db, client } = context;
   const ts = nowTs();
-
-  // Vorbedingungen
-  for (const n of ["accounts", "members"]) {
-    if (!(await hasCollection(db, n))) {
-      throw new Error(`Collection "${n}" missing – cannot migrate.`);
-    }
-  }
-
-  const OLD = (n: string) => `${n}_v1old_${ts}`;
-  const NEW = (n: string) => `__new__${n}_${ts}`;
-  const BK  = (n: string) => `${n}_v1bk_${ts}`; // Original vorm Swap (falls wir swappen)
+  const run = await startMigrationRun({ client, mainDb: db, mig: MIG_NAME, ts });
 
   let swapDone = false;
-  let eventsCreated = false;
 
-  // Rollback bei Fehler: Zustand exakt zurückdrehen + aufräumen
   const rollback = async (err: any) => {
-    console.warn(`[${MIG_NAME}] Rolling back due to error:`, err?.message || err);
-
+    console.warn(`[${MIG_NAME}] Rolling back:`, err?.message || err);
     try {
-      // events entfernen, falls schon angelegt
-      if (await hasCollection(db, "events")) {
-        await dropIf(db, "events");
-      }
-
-      // Accounts zurückswapen, falls bereits geswappt
-      if (swapDone) {
-        // final accounts -> tmp
-        const tmp = `__tmp_revert_accounts_${ts}`;
-        await safeRename(db, "accounts", tmp);
-        // BK zurück nach accounts
-        if (await hasCollection(db, BK("accounts"))) {
-          await safeRename(db, BK("accounts"), "accounts");
-        }
-        // tmp löschen
-        await dropIf(db, tmp);
-      }
-
-      // Temp-Collections löschen
-      await dropIf(db, NEW("accounts"));
-
-      // Validatoren zurücksetzen
-      await restoreValidatorFromBackup(db, "accounts");
-      await restoreValidatorFromBackup(db, "members");
-
-      // Snapshots löschen (sauberer Zustand ohne Leichen)
-      await dropIf(db, OLD("accounts"));
-      await dropIf(db, OLD("members"));
-      // evtl. liegen gebliebene BKs aufräumen (falls swapDone true war)
-      await dropIf(db, BK("accounts"));
+      await restoreRun(run, client, db);
+      await finalizeRun(run, client, db, "error", err);
     } catch (e) {
-      console.error(`[${MIG_NAME}] Rollback encountered an error:`, e);
+      console.error(`[${MIG_NAME}] Rollback restore failed:`, e);
     }
-
     throw err;
   };
 
   try {
-    // 1) Snapshots (Startzustand)
-    await copyBackup(db, "accounts", OLD("accounts"));
-    await copyBackup(db, "members",  OLD("members"));
+    for (const n of ["accounts", "members"]) {
+      if (!(await hasCollection(db, n))) throw new Error(`Collection "${n}" missing – cannot migrate.`);
+    }
 
-    // 2) Shadow-Kopie von accounts erzeugen
+    await recordValidator(run, client, "accounts", db);
+    await recordValidator(run, client, "members", db);
+
+    await backupCollection(run, client, db, "accounts");
+    await backupCollection(run, client, db, "members");
+    if (await hasCollection(db, "transactions")) {
+      await backupCollection(run, client, db, "transactions");
+    }
+
+    const NEW = (n: string) => `__new__${n}_${ts}`;
     await dropIf(db, NEW("accounts"));
-    // 2.1 Kopie
     await db.collection("accounts").aggregate([{ $match: {} }, { $out: NEW("accounts") }]).toArray();
-
-    // 2.2 Defaults in Shadow setzen (nur wenn fehlt)
     await db.collection(NEW("accounts")).updateMany(
       {},
       [
         { $set: { settings: { $ifNull: ["$settings", {}] } } },
         { $set: { "settings.dashboard": { $ifNull: ["$settings.dashboard", {}] } } },
-        { $set: { "settings.alerts":   { $ifNull: ["$settings.alerts",   {}] } } },
+        { $set: { "settings.alerts": { $ifNull: ["$settings.alerts", {}] } } },
         {
           $set: {
-            "settings.dashboard.historyMonths": {
-              $ifNull: ["$settings.dashboard.historyMonths", 6],
-            },
-            "settings.dashboard.topKCategories": {
-              $ifNull: ["$settings.dashboard.topKCategories", 5],
-            },
+            "settings.dashboard.historyMonths": { $ifNull: ["$settings.dashboard.historyMonths", 6] },
+            "settings.dashboard.topKCategories": { $ifNull: ["$settings.dashboard.topKCategories", 5] },
             "settings.alerts.lowBalanceForecastCents": {
               $ifNull: ["$settings.alerts.lowBalanceForecastCents", 100000],
             },
@@ -265,18 +233,15 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
       ]
     );
 
-    // 3) Swap (atomar)
     if (await hasCollection(db, "accounts")) {
-      await safeRename(db, "accounts", BK("accounts")); // Original vorm Swap
+      await dropIf(db, "accounts");
     }
     await safeRename(db, NEW("accounts"), "accounts");
     swapDone = true;
 
-    // 4) Validatoren anwenden (nach Swap, damit sie auf der finalen "accounts" liegen)
     await setValidatorMerged(db, "accounts", accountsAddValidator, "moderate", "error", ts);
-    await setValidatorMerged(db, "members",  membersAddValidator,  "moderate", "error", ts);
+    await setValidatorMerged(db, "members", membersAddValidator, "moderate", "error", ts);
 
-    // 5) events-Collection anlegen + Indizes
     if (!(await hasCollection(db, "events"))) {
       await db.createCollection("events", eventsCreateOptions as any);
     } else {
@@ -284,7 +249,6 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
     }
     await db.collection("events").createIndex({ accountId: 1, date: -1 });
     await db.collection("events").createIndex({ createdByMemberId: 1, date: -1 });
-    eventsCreated = true;
 
     // 6) Beispiel-Events seeden
     const accounts = await db.collection("accounts").find({}, { projection: { _id: 1, members: 1 } }).toArray();
@@ -334,31 +298,33 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
       }
     }
 
-    // 7) Erfolgscleanup: Backups & Temps weg
-    await dropIf(db, OLD("accounts"));
-    await dropIf(db, OLD("members"));
     await dropIf(db, NEW("accounts"));
-    // Optional: auch BK entfernen, weil du „bei Erfolg Backups löschen“ willst
-    await dropIf(db, BK("accounts"));
 
-    console.log(`[${MIG_NAME}] Up migration finished successfully.`);
+    await finalizeRun(run, client, db, "ok");
+    console.log(`[${MIG_NAME}] Up migration finished with registry backups.`);
   } catch (err) {
-    await rollback(err);
+    if (swapDone) {
+      try {
+        await rollback(err);
+      } catch {
+        throw err;
+      }
+    } else {
+      await finalizeRun(run, client, db, "error", err);
+      throw err;
+    }
   }
 };
 
 // ------------------------ Migration DOWN ------------------------
 export const down = async ({ context }: { context: MigrationCtx }) => {
-  const { db } = context;
+  const { db, client } = context;
+  const run = await getLatestRun(client, db, MIG_NAME);
 
-  // (Unverändert) events entfernen & Felder rückgängig machen
-  // 1) events entfernen
   if (await hasCollection(db, "events")) {
     await db.collection("events").drop();
   }
 
-  // 2) accounts: neue Felder wieder entfernen
-  // 2.1 konkrete Felder unsetten
   await db.collection("accounts").updateMany(
     {},
     {
@@ -370,7 +336,6 @@ export const down = async ({ context }: { context: MigrationCtx }) => {
       },
     }
   );
-  // 2.2 leere Objekte dashboard/alerts entfernen
   await db.collection("accounts").updateMany(
     {},
     [
@@ -394,37 +359,37 @@ export const down = async ({ context }: { context: MigrationCtx }) => {
       },
     ]
   );
-  // 2.3 settings ggf. komplett entfernen
   await db.collection("accounts").updateMany(
     {},
     [
       {
         $set: {
           settings: {
-            $cond: [
-              { $gt: [{ $size: { $objectToArray: "$settings" } }, 0] },
-              "$settings",
-              "$$REMOVE",
-            ],
+            $cond: [{ $gt: [{ $size: { $objectToArray: "$settings" } }, 0] }, "$settings", "$$REMOVE"],
           },
         },
       },
     ]
   );
 
-  // 3) Validatoren zurücksetzen
-  await restoreValidatorFromBackup(db, "accounts");
-  await restoreValidatorFromBackup(db, "members");
+  if (run) {
+    await restoreRun(run, client, db, ["accounts", "members"]);
+    await finalizeRun(run, client, db, "rolled_back");
+    console.log(`[${MIG_NAME}] Down restored from registry backups.`);
+  } else {
+    console.warn(`[${MIG_NAME}] No registry run found – structural rollback limited.`);
+  }
 
-  // 4) Cleanup: Nur temporäre Collections entfernen, KEINE v1bk_/v1old_ Backups global löschen
   const all = await db.listCollections().toArray();
   for (const { name } of all) {
     if (name.startsWith("__new__") || name.startsWith("__tmp_revert_")) {
-      try { await db.collection(name).drop(); } catch {}
+      try {
+        await db.collection(name).drop();
+      } catch {
+        /* ignore */
+      }
     }
   }
-
-  console.log(`[${MIG_NAME}] Down migration finished (Backups anderer Migrationen beibehalten).`);
 };
 
 export default { up, down };

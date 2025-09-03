@@ -12,7 +12,7 @@
     "migrate:create": "tsx scripts/new-migration.ts",
     "build": "tsc -p .",
     "start": "set NODE_ENV=production&& node dist/src/server.js",
-    "seed": "ts-node-dev --transpile-only scripts/seed.ts",
+    "seed": "tsx scripts/seed.ts",
     "mongod": "mongod --dbpath D:\\mogodb\\db",
     "revert": "tsx scripts/revertHalfMigration.ts"
   },

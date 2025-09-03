@@ -1,95 +1,134 @@
 import "dotenv/config";
 import fs from "fs/promises";
 import path from "path";
-import { connectDB } from "../src/db.js";
-import Member from "../src/models/Member.js";
-import Account from "../src/models/Account.js";
-import Category from "../src/models/Category.js";
-import Transaction from "../src/models/Transaction.js";
-import Template from "../src/models/TransactionTemplate.js";
+import mongoose, { Schema } from "mongoose";
 
 type DB = {
-  member: any[];
+  members: any[];
   accounts: any[];
   categories: any[];
   transactions: any[];
   transactionTemplates: any[];
 };
 
+// Kommentar-toleranter Parser
+function parseJsonWithComments(txt: string) {
+  return JSON.parse(
+    txt
+      .replace(/\/\*[\s\S]*?\*\//g, "") // Block-Kommentare
+      .replace(/^\s*\/\/.*$/gm, "") // Zeilen-Kommentare
+  );
+}
+
+// Flexibles Model mit string _id (verhindert ObjectId-Cast)
+function createFlexibleModel(name: string, collection: string) {
+  const schema = new Schema(
+    { _id: { type: String } },
+    { strict: false, versionKey: false }
+  );
+  return mongoose.models[name] || mongoose.model(name, schema, collection);
+}
+
+const Member = createFlexibleModel("Member", "members");
+const Account = createFlexibleModel("Account", "accounts");
+const Category = createFlexibleModel("Category", "categories");
+const Transaction = createFlexibleModel("Transaction", "transactions");
+const TransactionTemplate = createFlexibleModel(
+  "TransactionTemplate",
+  "transactionTemplates"
+);
+
 async function ensureMembersExist(ids: string[], known: Set<string>) {
-  const created: string[] = [];
-  for (const id of ids) {
-    if (!known.has(id)) {
-      await Member.create({ _id: id, name: `Placeholder ${id}` });
-      known.add(id);
-      created.push(id);
-    }
-  }
-  return created;
+  const toCreate = ids.filter((id) => id && !known.has(id));
+  if (!toCreate.length) return;
+  await Member.insertMany(
+    toCreate.map((id) => ({
+      _id: id,
+      name: `Placeholder ${id}`,
+      placeholder: true
+    }))
+  );
+  toCreate.forEach((id) => known.add(id));
+}
+
+async function loadData(): Promise<DB> {
+  const file = path.resolve("./db.json");
+  const raw = await fs.readFile(file, "utf-8");
+  return parseJsonWithComments(raw);
+}
+
+function mapWithId<T extends { id?: string }>(arr: T[] = []) {
+  return arr.map((o) => {
+    const { id, ...rest } = o;
+    return { _id: id, ...rest };
+  });
 }
 
 async function main() {
-  const uri = process.env.MONGODB_URI!;
-  await connectDB(uri);
+  const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/tobu-finance";
+  console.log("Connecting:", uri);
+  await mongoose.connect(uri);
+  console.log("Mongo connected.");
 
-  // Datei laden (Passe den Pfad an deine Umgebung an)
-  const file = path.resolve("./db.json"); // <- z.B. projektnah ablegen
-  const raw = await fs.readFile(file, "utf-8");
-  const data: DB = JSON.parse(raw);
+  const data = await loadData();
 
-  // clean
+  console.log("Cleaning existing data...");
   await Promise.all([
     Member.deleteMany({}),
     Account.deleteMany({}),
     Category.deleteMany({}),
     Transaction.deleteMany({}),
-    Template.deleteMany({})
+    TransactionTemplate.deleteMany({})
   ]);
 
-  // Members
-  const members = data.member.map((m) => ({ _id: m.id, ...m }));
+  console.log("Inserting members...");
+  const members = mapWithId(data.members || []);
   await Member.insertMany(members);
-  const known = new Set(members.map((m) => m._id));
+  const known = new Set(members.map((m: any) => m._id));
 
-  // Accounts + Platzhalter für ggf. fehlende memberIds
-  for (const acc of data.accounts) {
-    const accountMemberIds: string[] = Array.isArray(acc.memberIds) ? acc.memberIds : [];
-    await ensureMembersExist(accountMemberIds, known);
+  console.log("Inserting accounts...");
+  for (const acc of data.accounts || []) {
+    const memberIds: string[] = Array.isArray(acc.members) ? acc.members : [];
+    await ensureMembersExist(memberIds, known);
 
-    // topUps: Subdocs _id aus id
-    const topUps = (acc.topUps || []).map((t: any) => ({ _id: t.id, ...t }));
+    const topUps = (acc.topUps || []).map((t: any) => {
+      if (t.id) return { _id: t.id, ...t };
+      return t;
+    });
+
     const doc = { _id: acc.id, ...acc, topUps };
     await Account.create(doc);
   }
 
-  // Categories (customSplit gemischt => Mixed)
-  const cats = data.categories.map((c) => ({ _id: c.id, ...c }));
-  await Category.insertMany(cats);
+  console.log("Inserting categories...");
+  await Category.insertMany(mapWithId(data.categories || []));
 
-  // Transactions
-  // paidByMemberId prüfen + ggf. Placeholder
+  console.log("Preparing transactions (checking missing payer IDs)...");
   const missingPayerIds = Array.from(
     new Set(
-      data.transactions
+      (data.transactions || [])
         .map((t) => t.paidByMemberId)
-        .filter((x): x is string => typeof x === "string")
+        .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
         .filter((x) => !known.has(x))
     )
   );
   await ensureMembersExist(missingPayerIds, known);
 
-  const txs = data.transactions.map((t) => ({ _id: t.id, ...t }));
-  await Transaction.insertMany(txs);
+  console.log("Inserting transactions...");
+  await Transaction.insertMany(mapWithId(data.transactions || []));
 
-  // Templates
-  const tpl = data.transactionTemplates.map((t) => ({ _id: t.id, ...t }));
-  await Template.insertMany(tpl);
+  console.log("Inserting transaction templates...");
+  await TransactionTemplate.insertMany(mapWithId(data.transactionTemplates || []));
 
-  console.log("Seed fertig.");
+  console.log("Seeding abgeschlossen ohne Cast-Fehler.");
+  await mongoose.disconnect();
   process.exit(0);
 }
 
-main().catch((e) => {
-  console.error(e);
+main().catch(async (err) => {
+  console.error("Seeding fehlgeschlagen:", err);
+  try {
+    await mongoose.disconnect();
+  } catch {}
   process.exit(1);
 });

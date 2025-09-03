@@ -1,5 +1,5 @@
 {
-  "member": [
+  "members": [
     {
       "id": "m1",
       "name": "Tony",
@@ -51,56 +51,56 @@
       ],
       "monthlyIncomes": [
         {
-          "memberId": "b1",
+          "memberId": "m1",
           "amount": 2800,
           "startMonth": "2025-01",
           "endMonth": "2025-01"
         },
         {
-          "memberId": "b1",
+          "memberId": "m1",
           "amount": 3000,
           "startMonth": "2025-02"
         },
         {
-          "memberId": "b2",
+          "memberId": "m2",
           "amount": 2000,
           "startMonth": "2025-01",
           "endMonth": "2025-01"
         },
         {
-          "memberId": "b2",
+          "memberId": "m2",
           "amount": 2100,
           "startMonth": "2025-02"
         }
       ],
       "monthlyPlannedContributions": [
         {
-          "memberId": "b1",
+          "memberId": "m1",
           "amount": 500,
           "startMonth": "2025-01",
           "endMonth": "2025-02"
         },
         {
-          "memberId": "b1",
+          "memberId": "m1",
           "amount": 550,
           "startMonth": "2025-03"
         },
         {
-          "memberId": "b2",
+          "memberId": "m2",
           "amount": 400,
           "startMonth": "2025-01"
         }
       ],
       "additionalContributions": [
         {
-          "memberId": "b1",
+          "memberId": "m1",
           "amount": 250,
           "startMonth": "2025-06",
           "description": "Kindergeld",
           "recurring": true
         },
         {
-          "memberId": "b2",
+          "memberId": "m2",
           "amount": 200,
           "startMonth": "2025-06",
           "description": "Zuschuss Eltern",
@@ -109,17 +109,17 @@
       ],
       "carryOverBalances": [
         {
-          "memberId": "b1",
+          "memberId": "m1",
           "amount": -30,
           "month": "2025-01"
         },
         {
-          "memberId": "b2",
+          "memberId": "m2",
           "amount": 0,
           "month": "2025-01"
         },
         {
-          "memberId": "b1",
+          "memberId": "m1",
           "amount": -10,
           "month": "2025-02"
         }
@@ -140,11 +140,11 @@
           "date": "2025-08-05",
           "customSplit": [
             {
-              "memberId": "b1",
+              "memberId": "m1",
               "split": 70
             },
             {
-              "memberId": "b2",
+              "memberId": "m2",
               "split": 30
             }
           ]
@@ -234,11 +234,11 @@
       "name": "Versicherung",
       "customSplit": [
         {
-          "memberId": "b1",
+          "memberId": "m1",
           "split": 50
         },
         {
-          "memberId": "b2",
+          "memberId": "m2",
           "split": 50
         }
       ]
@@ -300,7 +300,7 @@
       "month": "2025-01",
       "isRecurring": false,
       "isFromSharedAccount": false,
-      "paidByMemberId": "b2",
+      "paidByMemberId": "m2",
       "status": "booked"
     },
     {
@@ -325,7 +325,7 @@
       "month": "2025-02",
       "isRecurring": false,
       "isFromSharedAccount": false,
-      "paidByMemberId": "b1",
+      "paidByMemberId": "m1",
       "status": "pending"
     },
     {
@@ -351,7 +351,7 @@
       "month": "2025-03",
       "isRecurring": false,
       "isFromSharedAccount": false,
-      "paidByMemberId": "b1",
+      "paidByMemberId": "m1",
       "status": "pending"
     },
     {
@@ -388,7 +388,7 @@
       "type": "income",
       "month": "2025-01",
       "isRecurring": true,
-      "paidByMemberId": "b1",
+      "paidByMemberId": "m1",
       "status": "booked",
       "recurringTemplateId": "t2"
     },
@@ -401,7 +401,7 @@
       "type": "income",
       "month": "2025-01",
       "isRecurring": true,
-      "paidByMemberId": "b2",
+      "paidByMemberId": "m2",
       "status": "booked",
       "recurringTemplateId": "t3"
     },
@@ -414,7 +414,7 @@
       "type": "income",
       "month": "2025-02",
       "isRecurring": true,
-      "paidByMemberId": "b2",
+      "paidByMemberId": "m2",
       "status": "pending",
       "recurringTemplateId": "t4"
     },
@@ -441,7 +441,7 @@
       "type": "expense",
       "isRecurring": true,
       "isFromSharedAccount": true,
-      "createdBy": "b1"
+      "createdBy": "m1"
     },
     {
       "id": "t2",
@@ -451,8 +451,8 @@
       "amount": 2800,
       "type": "income",
       "isRecurring": true,
-      "paidByMemberId": "b1",
-      "createdBy": "b1"
+      "paidByMemberId": "m1",
+      "createdBy": "m1"
     },
     {
       "id": "t3",
@@ -462,8 +462,8 @@
       "amount": 2000,
       "type": "income",
       "isRecurring": true,
-      "paidByMemberId": "b2",
-      "createdBy": "b2"
+      "paidByMemberId": "m2",
+      "createdBy": "m2"
     },
     {
       "id": "t4",
@@ -473,8 +473,8 @@
       "amount": 250,
       "type": "income",
       "isRecurring": true,
-      "paidByMemberId": "b2",
-      "createdBy": "b2"
+      "paidByMemberId": "m2",
+      "createdBy": "m2"
     }
   ]
 }
