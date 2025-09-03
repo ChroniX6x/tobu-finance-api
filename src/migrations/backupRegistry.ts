@@ -157,3 +157,16 @@ export async function restoreRun(
     }
   }
 }
+
+// --- Added: no-op migration exports so this helper file satisfies Umzug interface ---
+export const up = async () => {
+  // intentionally empty: helper file, not a real migration
+  return;
+};
+
+export const down = async () => {
+  // intentionally empty
+  return;
+};
+
+export default { up, down };

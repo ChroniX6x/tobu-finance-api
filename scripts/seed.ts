@@ -64,22 +64,70 @@ function mapWithId<T extends { id?: string }>(arr: T[] = []) {
   });
 }
 
+// NEU: vollständiger Reset (alle Collections droppen)
+async function dropAllCollections() {
+  const skip = new Set(
+    (process.env.SKIP_DROP || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+  const db = mongoose.connection.db;
+  const cols = await db.listCollections().toArray();
+  for (const c of cols) {
+    if (c.name.startsWith("system.")) continue;
+    if (skip.has(c.name)) {
+      console.log(`[reset] Skipping drop of ${c.name}`);
+      continue;
+    }
+    await db.dropCollection(c.name);
+    console.log(`[reset] Dropped collection: ${c.name}`);
+  }
+}
+
+// NEU: Backup-DB ebenfalls leeren (falls MIGRATION_BACKUP_DB gesetzt)
+async function dropBackupCollectionsIfConfigured() {
+  const backupName = process.env.MIGRATION_BACKUP_DB?.trim();
+  if (!backupName) {
+    console.log("[reset] No MIGRATION_BACKUP_DB set -> skipping backup DB cleanup.");
+    return;
+  }
+  const mainName = mongoose.connection.db.databaseName;
+  if (backupName === mainName) {
+    console.log("[reset] MIGRATION_BACKUP_DB equals main DB -> skipping (already cleared).");
+    return;
+  }
+  const client = mongoose.connection.getClient
+    ? mongoose.connection.getClient()
+    : (mongoose as any).connection.client;
+  const backupDb = client.db(backupName);
+  console.log(`[reset] Dropping collections in backup DB '${backupName}' ...`);
+  const cols = await backupDb.listCollections().toArray();
+  for (const c of cols) {
+    if (c.name.startsWith("system.")) continue;
+    await backupDb.dropCollection(c.name);
+    console.log(`[reset][backup] Dropped collection: ${c.name}`);
+  }
+  console.log("[reset] Backup DB cleanup done.");
+}
+
 async function main() {
   const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/tobu-finance";
+  if (process.env.NODE_ENV === "production" && process.env.FORCE_RESET !== "1") {
+    console.error("Refusing to run full reset in production without FORCE_RESET=1");
+    process.exit(2);
+  }
   console.log("Connecting:", uri);
   await mongoose.connect(uri);
   console.log("Mongo connected.");
 
-  const data = await loadData();
+  console.log("Reset: dropping all existing collections...");
+  await dropAllCollections();
 
-  console.log("Cleaning existing data...");
-  await Promise.all([
-    Member.deleteMany({}),
-    Account.deleteMany({}),
-    Category.deleteMany({}),
-    Transaction.deleteMany({}),
-    TransactionTemplate.deleteMany({})
-  ]);
+  // NEU: Backup-DB auch resetten
+  await dropBackupCollectionsIfConfigured();
+
+  const data = await loadData();
 
   console.log("Inserting members...");
   const members = mapWithId(data.members || []);
@@ -120,7 +168,7 @@ async function main() {
   console.log("Inserting transaction templates...");
   await TransactionTemplate.insertMany(mapWithId(data.transactionTemplates || []));
 
-  console.log("Seeding abgeschlossen ohne Cast-Fehler.");
+  console.log("Reset + Seeding abgeschlossen.");
   await mongoose.disconnect();
   process.exit(0);
 }
