@@ -74,11 +74,18 @@ export async function recordValidator(run: MigrationRun, client: MongoClient, co
   run.validators.push({ coll, validator, validationLevel, validationAction });
 }
 
+// Neuer Helper: baut sortierbare Backup-Namen (beginnend mit MIG_NAME = Datum)
+function formatBackupCollectionName(run: MigrationRun, mainDb: Db, coll: string): string {
+  // Beispiel: 20250820_add_settings_events__tobu_db__accounts__20250821123059
+  return `${run.mig}__${mainDb.databaseName}__${coll}__${run.ts}`;
+}
+
 export async function backupCollection(run: MigrationRun, client: MongoClient, mainDb: Db, coll: string) {
   const exists = await mainDb.listCollections({ name: coll }).toArray();
   if (!exists.length) return;
   const backupDb = getBackupDb(client, mainDb);
-  const backupColl = `${mainDb.databaseName}__${coll}__${run.mig}__${run.ts}`;
+  // ALT: `${mainDb.databaseName}__${coll}__${run.mig}__${run.ts}`
+  const backupColl = formatBackupCollectionName(run, mainDb, coll);
   await mainDb
     .collection(coll)
     .aggregate([{ $match: {} }, { $out: { db: backupDb.databaseName, coll: backupColl } }])
@@ -157,16 +164,3 @@ export async function restoreRun(
     }
   }
 }
-
-// --- Added: no-op migration exports so this helper file satisfies Umzug interface ---
-export const up = async () => {
-  // intentionally empty: helper file, not a real migration
-  return;
-};
-
-export const down = async () => {
-  // intentionally empty
-  return;
-};
-
-export default { up, down };

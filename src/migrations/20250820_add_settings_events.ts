@@ -6,7 +6,8 @@ import {
   finalizeRun,
   getLatestRun,
   restoreRun,
-} from "./backupRegistry";
+  getBackupDb, // hinzugefügt
+} from "./lib/backupRegistry.js";
 
 export type MigrationCtx = { db: Db; client: MongoClient };
 
@@ -42,10 +43,11 @@ async function getExistingValidator(db: Db, name: string) {
   const validationAction = info?.options?.validationAction ?? undefined;
   return { validator, validationLevel, validationAction };
 }
-async function saveValidatorBackup(db: Db, coll: string, ts: string) {
-  await db.collection("_validator_backups").createIndex({ coll: 1, savedAt: -1 });
-  const existing = await getExistingValidator(db, coll);
-  await db.collection("_validator_backups").insertOne({
+async function saveValidatorBackup(mainDb: Db, client: MongoClient, coll: string, ts: string) {
+  const backupDb = getBackupDb(client, mainDb);
+  await backupDb.collection("_validator_backups").createIndex({ coll: 1, savedAt: -1 });
+  const existing = await getExistingValidator(mainDb, coll);
+  await backupDb.collection("_validator_backups").insertOne({
     ts,
     coll,
     validator: existing.validator ?? null,
@@ -54,38 +56,40 @@ async function saveValidatorBackup(db: Db, coll: string, ts: string) {
     savedAt: new Date(),
   });
 }
-async function restoreValidatorFromBackup(db: Db, name: string) {
-  const doc = await db
+async function restoreValidatorFromBackup(mainDb: Db, client: MongoClient, name: string) {
+  const backupDb = getBackupDb(client, mainDb);
+  const doc = await backupDb
     .collection("_validator_backups")
     .find({ coll: name })
     .sort({ savedAt: -1 })
     .limit(1)
     .next();
   if (!doc) return; // nichts zu tun
-  await db.command({
+  await mainDb.command({
     collMod: name,
     validator: doc.validator ?? {},
     validationLevel: (doc.validationLevel as any) ?? "strict",
     validationAction: (doc.validationAction as any) ?? "error",
   });
 }
-// Merged-Validator anwenden (bestehenden beibehalten)
+// Merged-Validator anwenden (bestehenden beibehalten) – Backups jetzt in backupDb
 async function setValidatorMerged(
-  db: Db,
+  mainDb: Db,
+  client: MongoClient,
   name: string,
   addValidator: Record<string, any>,
   level: "strict" | "moderate" = "moderate",
   action: "error" | "warn" = "error",
   ts?: string
 ) {
-  await saveValidatorBackup(db, name, ts ?? nowTs());
-  const existing = await getExistingValidator(db, name);
+  await saveValidatorBackup(mainDb, client, name, ts ?? nowTs());
+  const existing = await getExistingValidator(mainDb, name);
   const merged =
     existing.validator && Object.keys(existing.validator).length
       ? { $and: [existing.validator, addValidator] }
       : addValidator;
 
-  await db.command({
+  await mainDb.command({
     collMod: name,
     validator: merged,
     validationLevel: level,
@@ -176,24 +180,24 @@ const eventsCreateOptions = {
   validationAction: "error",
 } as const;
 
+// NEU: Backups dieses Runs vollständig löschen (nur eigene Collections)
+async function purgeRunBackups(run: any, client: MongoClient, mainDb: Db) {
+  const backupDb = getBackupDb(client, mainDb);
+  for (const c of run.collections) {
+    try {
+      if ((await backupDb.listCollections({ name: c.backupColl }).toArray()).length) {
+        await backupDb.collection(c.backupColl).drop();
+      }
+    } catch { /* ignore */ }
+  }
+  await backupDb.collection("_migration_runs").deleteOne({ _id: run._id });
+}
+
 // ------------------------ Migration UP ------------------------
 export const up = async ({ context }: { context: MigrationCtx }) => {
   const { db, client } = context;
   const ts = nowTs();
   const run = await startMigrationRun({ client, mainDb: db, mig: MIG_NAME, ts });
-
-  let swapDone = false;
-
-  const rollback = async (err: any) => {
-    console.warn(`[${MIG_NAME}] Rolling back:`, err?.message || err);
-    try {
-      await restoreRun(run, client, db);
-      await finalizeRun(run, client, db, "error", err);
-    } catch (e) {
-      console.error(`[${MIG_NAME}] Rollback restore failed:`, e);
-    }
-    throw err;
-  };
 
   try {
     for (const n of ["accounts", "members"]) {
@@ -237,10 +241,10 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
       await dropIf(db, "accounts");
     }
     await safeRename(db, NEW("accounts"), "accounts");
-    swapDone = true;
 
-    await setValidatorMerged(db, "accounts", accountsAddValidator, "moderate", "error", ts);
-    await setValidatorMerged(db, "members", membersAddValidator, "moderate", "error", ts);
+    // Aufrufe aktualisiert (client ergänzt)
+    await setValidatorMerged(db, client, "accounts", accountsAddValidator, "moderate", "error", ts);
+    await setValidatorMerged(db, client, "members", membersAddValidator, "moderate", "error", ts);
 
     if (!(await hasCollection(db, "events"))) {
       await db.createCollection("events", eventsCreateOptions as any);
@@ -301,17 +305,25 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
     await dropIf(db, NEW("accounts"));
 
     await finalizeRun(run, client, db, "ok");
-    console.log(`[${MIG_NAME}] Up migration finished with registry backups.`);
+    console.log(`[${MIG_NAME}] Up migration finished with registry backups (retained).`);
   } catch (err) {
-    if (swapDone) {
-      try {
-        await rollback(err);
-      } catch {
-        throw err;
-      }
-    } else {
+    console.error(`[${MIG_NAME}] Up failed:`, err);
+    try {
+      await restoreRun(run, client, db);
       await finalizeRun(run, client, db, "error", err);
-      throw err;
+      await purgeRunBackups(run, client, db);
+      console.log(`[${MIG_NAME}] Original state restored and backups removed after failure.`);
+    } catch (r) {
+      console.error(`[${MIG_NAME}] Restore/purge after failure failed:`, r);
+    }
+    throw err;
+  } finally {
+    // temporäre NEW Collections immer entfernen
+    const all = await db.listCollections().toArray();
+    for (const { name } of all) {
+      if (name.startsWith("__new__")) {
+        try { await db.collection(name).drop(); } catch {}
+      }
     }
   }
 };
@@ -373,21 +385,24 @@ export const down = async ({ context }: { context: MigrationCtx }) => {
   );
 
   if (run) {
-    await restoreRun(run, client, db, ["accounts", "members"]);
-    await finalizeRun(run, client, db, "rolled_back");
-    console.log(`[${MIG_NAME}] Down restored from registry backups.`);
+    try {
+      await restoreRun(run, client, db, ["accounts", "members", "transactions"]);
+      await finalizeRun(run, client, db, "rolled_back");
+      await purgeRunBackups(run, client, db);
+      console.log(`[${MIG_NAME}] Down: restored and deleted backups for this migration.`);
+    } catch (err) {
+      console.error(`[${MIG_NAME}] Down restore failed:`, err);
+      throw err;
+    }
   } else {
-    console.warn(`[${MIG_NAME}] No registry run found – structural rollback limited.`);
+    console.warn(`[${MIG_NAME}] No registry run found – nothing to purge.`);
   }
 
+  // Temp-Reste bereinigen
   const all = await db.listCollections().toArray();
   for (const { name } of all) {
     if (name.startsWith("__new__") || name.startsWith("__tmp_revert_")) {
-      try {
-        await db.collection(name).drop();
-      } catch {
-        /* ignore */
-      }
+      try { await db.collection(name).drop(); } catch {}
     }
   }
 };
