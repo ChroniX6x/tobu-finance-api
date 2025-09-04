@@ -1,21 +1,21 @@
 import { z } from "zod";
-import { ObjId, MoneyCents, Month } from "./common.js";
 
-export const QueryMemberIncomes = z.object({
-  accountId: ObjId.optional(),
-  memberId: ObjId.optional(),
-  from: Month.optional(),
-  to: Month.optional()
-});
+const ObjectId = z.string().regex(/^[a-f\d]{24}$/i, "must be a 24-char hex ObjectId");
+const ISODate = z.string().datetime();
 
 export const CreateMemberIncome = z.object({
-  accountId: ObjId,
-  memberId: ObjId,
-  amountCents: MoneyCents,
-  fromMonth: Month.nullish(),
-  toMonth: Month.nullish(),
-  source: z.string().nullish(),
-  note: z.string().nullish()
+  accountId: ObjectId,
+  memberId: ObjectId,
+  amountCents: z.number().int().nonnegative(),
+  fromMonth: ISODate.nullish(),
+  toMonth: ISODate.nullish(),
 });
 
-export const UpdateMemberIncome = CreateMemberIncome.partial();
+export const UpdateMemberIncome = z.object({
+  amountCents: z.number().int().nonnegative().optional(),
+  fromMonth: ISODate.nullish(),
+  toMonth: ISODate.nullish(),
+});
+
+export type CreateMemberIncomeInput = z.infer<typeof CreateMemberIncome>;
+export type UpdateMemberIncomeInput = z.infer<typeof UpdateMemberIncome>;

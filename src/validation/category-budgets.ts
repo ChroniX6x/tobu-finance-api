@@ -1,19 +1,21 @@
 import { z } from "zod";
-import { ObjId, MoneyCents, Month } from "./common.js";
 
-export const QueryCategoryBudgets = z.object({
-  accountId: ObjId.optional(),
-  categoryId: ObjId.optional(),
-  from: Month.optional(),
-  to: Month.optional()
-});
+const ObjectId = z.string().regex(/^[a-f\d]{24}$/i, "must be a 24-char hex ObjectId");
+const ISODate = z.string().datetime();
 
 export const CreateCategoryBudget = z.object({
-  accountId: ObjId,
-  categoryId: ObjId,
-  amountCents: MoneyCents,
-  fromMonth: Month.nullish(),
-  toMonth: Month.nullish()
+  accountId: ObjectId,
+  categoryId: ObjectId,
+  amountCents: z.number().int().nonnegative(),
+  fromMonth: ISODate.nullish(),
+  toMonth: ISODate.nullish(),
 });
 
-export const UpdateCategoryBudget = CreateCategoryBudget.partial();
+export const UpdateCategoryBudget = z.object({
+  amountCents: z.number().int().nonnegative().optional(),
+  fromMonth: ISODate.nullish(),
+  toMonth: ISODate.nullish(),
+});
+
+export type CreateCategoryBudgetInput = z.infer<typeof CreateCategoryBudget>;
+export type UpdateCategoryBudgetInput = z.infer<typeof UpdateCategoryBudget>;

@@ -18,6 +18,9 @@ import {
   QueryAccountExpanded,
 } from "../validation/accounts.js";
 
+import { DateTime } from "luxon";
+import Event from "../models/Event.js";
+
 const r = Router();
 
 const monthToRange = (m: string) => {
@@ -194,6 +197,15 @@ r.post("/:id/members", async (req, res) => {
   if (idx >= 0) acc.members[idx].role = role ?? acc.members[idx].role ?? "member";
   else acc.members.push({ memberId: mId, role: role ?? "member" });
   await acc.save();
+
+  await Event.create({
+    accountId: acc._id,
+    date: DateTime.utc().toJSDate(),
+    code: "account.member.added",
+    params: { memberId: mId.toString() },
+    createdByMemberId: mId,
+  });
+
   res.json(acc);
 });
 
@@ -209,6 +221,15 @@ r.delete("/:id/members/:memberId", async (req, res) => {
     { new: true }
   );
   if (!acc) return res.sendStatus(404);
+
+  await Event.create({
+    accountId: acc._id,
+    date: DateTime.utc().toJSDate(),
+    code: "account.member.removed",
+    params: { memberId: mId.toString() },
+    createdByMemberId: mId,
+  });
+
   res.json(acc);
 });
 

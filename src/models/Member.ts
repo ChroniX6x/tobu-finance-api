@@ -1,11 +1,14 @@
-import { Schema, model, Types } from "mongoose";
+import mongoose, { Schema, type InferSchemaType, model } from "mongoose";
+
 const MemberSchema = new Schema(
   {
     name: { type: String, default: null },
     email: { type: String, default: null },
-    userId: { type: Types.ObjectId, default: null } // optional App-User
+    userId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    avatar: { type: String, default: null }, // NEU
   },
-  { timestamps: true, versionKey: false }
+  { timestamps: true }
 );
-MemberSchema.index({ userId: 1 }, { sparse: true });
-export default model("Member", MemberSchema, "members");
+
+export type MemberDoc = InferSchemaType<typeof MemberSchema>;
+export default mongoose.models.Member || model("Member", MemberSchema);

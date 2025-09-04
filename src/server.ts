@@ -19,6 +19,7 @@ import { MongoClient } from "mongodb";
 import { MongoDBStorage, Umzug } from "umzug";
 import docsRouter from "./docs/swagger.js";
 import dashboardRouter from "./routes/dashboard.js";
+import accountOverviewRouter from "./routes/account-overview.js";
 
 const umzugLogger = {
     debug: (...a: any) => console.debug("[umzug]", ...a),
@@ -48,6 +49,7 @@ app.use("/api/category-budgets", budgets);
 
 app.use(docsRouter); // stellt /docs und /openapi.json bereit
 app.use("/api/dashboard", dashboardRouter);
+app.use("/api/accounts", accountOverviewRouter);
 
 app.get("/health/migrations", async (_req, res) => {
     const client = new MongoClient(process.env.MONGODB_URI!);

@@ -1,17 +1,27 @@
 import { z } from "zod";
-import { ObjId, MoneyCents, Month, Split } from "./common.js";
 
-const DistPerMember = z.object({ mode: z.literal("perMember"), memberId: ObjId, customSplit: z.null().optional() });
-const DistCustom = z.object({
-  mode: z.literal("customSplit"), memberId: z.null().optional(),
-  customSplit: z.array(Split).min(1)
-}).refine(v => Math.abs(v.customSplit.reduce((s,x)=>s+x.split,0)-100) < 1e-6, "customSplit must sum to 100");
-const DistProRata = z.object({ mode: z.literal("proRataIncome"), memberId: z.null().optional(), customSplit: z.null().optional() });
+const ObjectId = z.string().regex(/^[a-f\d]{24}$/i, "must be a 24-char hex ObjectId");
+const ISODate = z.string().datetime(); // ISO (date-time). Für Monatsanker gibst du den 1. des Monats 00:00Z.
 
-export const CreateRule = z.object({
-  accountId: ObjId, type: z.enum(["base","additional","topup"]),
-  recurring: z.boolean(), description: z.string().nullish(),
-  amountCents: MoneyCents, distribution: z.discriminatedUnion("mode",[DistPerMember, DistCustom, DistProRata]),
-  fromMonth: Month.nullish(), toMonth: Month.nullish(),
-  meta: z.object({ legacyTopUpDate: z.string().nullish() }).optional()
+export const CreateContributionRule = z.object({
+  accountId: ObjectId,
+  type: z.enum(["base", "additional", "topup"]),
+  amountCents: z.number().int().nonnegative(),
+  distribution: z.unknown(), // wird serverseitig geprüft/verteilt
+  fromMonth: ISODate.nullish(), // optional | null
+  toMonth: ISODate.nullish(),   // optional | null
+  createdByMemberId: ObjectId.nullish(),
 });
+
+export const UpdateContributionRule = z.object({
+  type: z.enum(["base", "additional", "topup"]).optional(),
+  amountCents: z.number().int().nonnegative().optional(),
+  distribution: z.unknown().optional(),
+  fromMonth: ISODate.nullish(), // .optional().nullable() durch .nullish()
+  toMonth: ISODate.nullish(),
+  createdByMemberId: ObjectId.nullish(),
+});
+
+// Falls du Types brauchst:
+export type CreateContributionRuleInput = z.infer<typeof CreateContributionRule>;
+export type UpdateContributionRuleInput = z.infer<typeof UpdateContributionRule>;
