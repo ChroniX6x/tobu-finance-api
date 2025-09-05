@@ -27,6 +27,24 @@ paths:
                 required: [ok]
                 example: { ok: true }
 
+  /health/migrations:
+    get:
+      summary: Migration health
+      description: Returns the list of pending migration names from Umzug.
+      responses:
+        '200':
+          description: Pending migrations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pending]
+                properties:
+                  pending:
+                    type: array
+                    items:
+                      type: string
+
   /api/members:
     get:
       summary: List members
@@ -79,7 +97,7 @@ paths:
         '204': { description: Deleted }
         '404': { $ref: '#/components/responses/NotFound' }
 
-    /api/accounts:
+  /api/accounts:
     get:
       summary: List accounts
       parameters:
@@ -502,6 +520,29 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ContributionRule' }
 
+  /api/contribution-rules/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    patch:
+      summary: Update contribution rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContributionRuleUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContributionRule' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      summary: Delete contribution rule
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /api/carryovers:
     get:
       summary: List carryovers
@@ -683,7 +724,20 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DashboardAccount'
-
+  /api/accounts/{id}/overview:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      summary: Account overview (analytics)
+      description: Aggregated KPIs, charts, insights and timeline for the given account.
+      responses:
+        '200':
+          description: Overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountOverview'
+        '404': { $ref: '#/components/responses/NotFound' }
 
 components:
   parameters:
@@ -957,6 +1011,64 @@ components:
           type: object
           properties:
             legacyTopUpDate: { type: string, nullable: true }
+    ContributionRuleUpdate:
+      allOf:
+        - $ref: '#/components/schemas/ContributionRuleCreate'
+
+    CarryOver:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        accountId: { $ref: '#/components/schemas/ObjectId' }
+        memberId: { $ref: '#/components/schemas/ObjectId' }
+        month: { type: string, format: date-time }
+        amountCents:
+          type: integer
+          description: May be negative
+        reason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time, nullable: true }
+
+    CarryOverUpsert:
+      type: object
+      required: [accountId, memberId, month, amountCents]
+      properties:
+        accountId: { $ref: '#/components/schemas/ObjectId' }
+        memberId: { $ref: '#/components/schemas/ObjectId' }
+        month: { $ref: '#/components/schemas/Month' }
+        amountCents:
+          type: integer
+          description: May be negative
+        reason: { type: string, nullable: true }
+
+    AccountBalance:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        accountId: { $ref: '#/components/schemas/ObjectId' }
+        month: { type: string, format: date-time }
+        closingBalanceCents:
+          type: integer
+          description: May be negative
+    AccountBalanceUpsert:
+      type: object
+      required: [accountId, month, closingBalanceCents]
+      properties:
+        accountId: { $ref: '#/components/schemas/ObjectId' }
+        month: { $ref: '#/components/schemas/Month' }
+        closingBalanceCents:
+          type: integer
+          description: May be negative
+
+    CategoryBudget:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        accountId: { $ref: '#/components/schemas/ObjectId' }
+        categoryId: { $ref: '#/components/schemas/ObjectId' }
+        amountCents: { type: integer, minimum: 0 }
+        fromMonth: { type: string, format: date-time, nullable: true }
+        toMonth: { type: string, format: date-time, nullable: true }
+
     DashboardAccount:
       type: object
       required: [id, name, memberCount, currentBalance, balanceHistory]
@@ -981,4 +1093,122 @@ components:
           items:
             type: integer
           example: [100000, 105000, 99000, 120000, 123456]
+
+    AccountOverview:
+      type: object
+      required: [account, members, quickStats, charts, insights, timeline]
+      properties:
+        account:
+          $ref: '#/components/schemas/AccountOverviewAccount'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountOverviewMember'
+        quickStats:
+          $ref: '#/components/schemas/AccountOverviewQuickStats'
+        charts:
+          $ref: '#/components/schemas/AccountOverviewCharts'
+        insights:
+          type: array
+          description: Insight objects; shape may vary by rule. Keys are not strictly specified.
+          items:
+            $ref: '#/components/schemas/Insight'
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEvent'
+
+    AccountOverviewAccount:
+      type: object
+      required: [id, currentMonth, currentBalance, balanceChangePct, forecast]
+      properties:
+        id:
+          type: string
+          description: Account ObjectId (string)
+          example: "60d21b4667d0d8992e610c85"
+        name: { type: string, nullable: true }
+        currentMonth: { type: string, format: date-time }
+        currentBalance: { type: integer }
+        balanceChangePct: { type: number }
+        forecast: { type: integer }
+        warning: { type: string, nullable: true }
+
+    AccountOverviewMember:
+      type: object
+      required: [id, monthlyDue, paidAmount, paid]
+      properties:
+        id: { $ref: '#/components/schemas/ObjectId' }
+        name: { type: string, nullable: true }
+        role: { type: string, enum: [owner, member], nullable: true }
+        avatar: { type: string, nullable: true }
+        monthlyDue: { type: integer }
+        paidAmount: { type: integer }
+        paid: { type: boolean }
+
+    AccountOverviewQuickStats:
+      type: object
+      required: [openDuesCount, pendingRecurringCount, extraContributionsCount, extraContributionsSum, warningsCount]
+      properties:
+        openDuesCount: { type: integer }
+        pendingRecurringCount: { type: integer }
+        extraContributionsCount: { type: integer }
+        extraContributionsSum: { type: integer }
+        warningsCount: { type: integer }
+
+    AccountOverviewCharts:
+      type: object
+      required: [history, incomeVsExpense, topCategories]
+      properties:
+        history:
+          $ref: '#/components/schemas/AccountOverviewChartHistory'
+        incomeVsExpense:
+          $ref: '#/components/schemas/AccountOverviewChartIncomeVsExpense'
+        topCategories:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountOverviewTopCategory'
+
+    AccountOverviewChartHistory:
+      type: object
+      required: [labels, data]
+      properties:
+        labels:
+          type: array
+          description: Month anchors (ISO)
+          items: { type: string, format: date-time }
+        data:
+          type: array
+          description: Monthly closing balances in cents (forward-filled), oldest to newest
+          items: { type: integer }
+
+    AccountOverviewChartIncomeVsExpense:
+      type: object
+      required: [income, expense]
+      properties:
+        income: { type: integer }
+        expense: { type: integer }
+
+    AccountOverviewTopCategory:
+      type: object
+      required: [sum]
+      properties:
+        name: { type: string, nullable: true }
+        sum: { type: integer }
+
+    Insight:
+      type: object
+      description: Generic insight entry. Exact fields depend on the insight kind.
+      properties:
+        kind: { type: string, description: Severity or category, e.g., info, warning, critical }
+        message: { type: string, nullable: true }
+      additionalProperties: true
+
+    TimelineEvent:
+      type: object
+      required: [id, date, text]
+      properties:
+        id: { $ref: '#/components/schemas/ObjectId' }
+        date: { type: string, format: date-time }
+        user: { type: string, nullable: true }
+        text: { type: string }
 
