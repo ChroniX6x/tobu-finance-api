@@ -15,12 +15,14 @@
     {
       "id": "4a7b",
       "name": "Tony Hoffmann",
-      "email": "sicphyer@gmx.de"
+      "email": "sicphyer@gmx.de",
+      "user": "u1"
     },
     {
       "id": "b4c4",
       "name": "Carolin Neumann",
-      "email": "neumann__carolin@web.de"
+      "email": "neumann__carolin@web.de",
+      "user": "u2"
     }
   ],
   "accounts": [
