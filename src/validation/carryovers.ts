@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ObjId, MoneyCentsAny, Month } from "./common.js";
+import { ObjId, MoneyMinorAny, Month } from "./common.js";
 
 export const QueryCarryOvers = z.object({
   accountId: ObjId.optional(),
@@ -12,6 +12,6 @@ export const UpsertCarryOver = z.object({
   accountId: ObjId,
   memberId: ObjId,
   month: Month,
-  amountCents: MoneyCentsAny,   // darf negativ sein
+  amountMinor: MoneyMinorAny,   // darf negativ sein
   reason: z.string().nullish()
 });

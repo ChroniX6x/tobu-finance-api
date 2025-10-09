@@ -3,7 +3,7 @@ const AccountBalanceSchema = new Schema(
   {
     accountId: { type: Types.ObjectId, required: true, ref: "Account" },
     month: { type: Date, default: null },
-    closingBalanceCents: { type: Number, required: true }
+    closingBalanceMinor: { type: Number, required: true }
   },
   { versionKey: false }
 );

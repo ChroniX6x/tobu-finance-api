@@ -32,7 +32,7 @@ r.post("/", validateBody(CreateContributionRule), async (req, res) => {
     data: {
       accountId: string;
       type: "base" | "additional" | "topup";
-      amountCents: number;
+      amountMinor: number;
       distribution: unknown;
       fromMonth?: string | null;
       toMonth?: string | null;
@@ -43,7 +43,7 @@ r.post("/", validateBody(CreateContributionRule), async (req, res) => {
   const doc: Record<string, unknown> = {
     accountId: new Types.ObjectId(b.accountId),
     type: b.type,
-    amountCents: b.amountCents,
+    amountMinor: b.amountMinor,
     distribution: b.distribution,
     fromMonth: b.fromMonth ? toMonthDate(b.fromMonth) : null,
     toMonth: b.toMonth ? toMonthDate(b.toMonth) : null,
@@ -56,7 +56,7 @@ r.post("/", validateBody(CreateContributionRule), async (req, res) => {
     accountId: new Types.ObjectId(b.accountId),
     date: DateTime.utc().toJSDate(),
     code: "contributionRule.added",
-    params: { ruleId: String(created._id), ruleType: b.type, amountCents: b.amountCents },
+    params: { ruleId: String(created._id), ruleType: b.type, amountMinor: b.amountMinor },
     createdByMemberId: b.createdByMemberId ? new Types.ObjectId(b.createdByMemberId) : null,
   });
 
@@ -69,7 +69,7 @@ r.patch("/:id", validateBody(UpdateContributionRule), async (req, res) => {
   const u = (req as unknown as {
     data: Partial<{
       type: "base" | "additional" | "topup";
-      amountCents: number;
+      amountMinor: number;
       distribution: unknown;
       fromMonth: string | null;
       toMonth: string | null;
@@ -82,7 +82,7 @@ r.patch("/:id", validateBody(UpdateContributionRule), async (req, res) => {
 
   const patch: Record<string, unknown> = {};
   if (u.type) patch.type = u.type;
-  if (typeof u.amountCents === "number") patch.amountCents = u.amountCents;
+  if (typeof u.amountMinor === "number") patch.amountMinor = u.amountMinor;
   if (u.distribution !== undefined) patch.distribution = u.distribution;
   if (u.fromMonth !== undefined) patch.fromMonth = u.fromMonth ? toMonthDate(u.fromMonth) : null;
   if (u.toMonth !== undefined) patch.toMonth = u.toMonth ? toMonthDate(u.toMonth) : null;
@@ -98,7 +98,7 @@ r.patch("/:id", validateBody(UpdateContributionRule), async (req, res) => {
     params: {
       ruleId: String(updated._id),
       ruleType: (updated as { type: string }).type,
-      amountCents: (updated as { amountCents?: number }).amountCents ?? 0,
+      amountMinor: (updated as { amountMinor?: number }).amountMinor ?? 0,
     },
     createdByMemberId: u.createdByMemberId ? new Types.ObjectId(u.createdByMemberId) : null,
   });

@@ -5,7 +5,7 @@ const TransactionSchema = new Schema(
     categoryId: { type: Types.ObjectId, ref: "Category", default: null },
     title: { type: String, default: null },
     type: { type: String, enum: ["income","expense"], required: true },
-    amountCents: { type: Number, required: true, min: 0 },
+    amountMinor: { type: Number, required: true, min: 0 },
     month: { type: Date, default: null },
     bookDate: { type: Date, default: null },
     status: { type: String, enum: ["booked","pending"], default: "pending" },

@@ -8,6 +8,9 @@ import { QueryDashboardAccounts } from "../validation/dashboard.js";
 
 const r = Router();
 
+// Staleness threshold in days (later from account.settings.alerts.stalenessDays)
+const DEFAULT_STALENESS_THRESHOLD_DAYS = 30;
+
 // Baue Liste der letzten N Monate (älteste -> neueste), als Date (UTC 1. des Monats 00:00)
 function lastNMonthsDates(n: number): Date[] {
   const now = new Date();
@@ -19,6 +22,60 @@ function lastNMonthsDates(n: number): Date[] {
     out.push(d);
   }
   return out;
+}
+
+/**
+ * Findet den letzten verlässlichen Balance-Stand (≤ heute)
+ */
+function findLastReliableBalance(
+  balances: Array<{ month: Date; closingBalanceMinor: number }>,
+  today: Date
+): { month: string; balanceMinor: number } | null {
+  // Sortiere Balances absteigend nach Monat
+  const sorted = balances
+    .filter(b => b.month <= today)
+    .sort((a, b) => b.month.getTime() - a.month.getTime());
+  
+  if (sorted.length === 0) return null;
+  
+  const last = sorted[0];
+  if (!last) return null;
+  
+  return {
+    month: last.month.toISOString(),
+    balanceMinor: last.closingBalanceMinor ?? 0,
+  };
+}
+
+/**
+ * Berechnet Staleness in Tagen: heute - Ende des currentMonth
+ */
+function calculateStaleness(currentMonthISO: string, today: Date): number {
+  const monthDate = new Date(currentMonthISO);
+  const y = monthDate.getUTCFullYear();
+  const m = monthDate.getUTCMonth();
+  // Ende des Monats = Anfang des nächsten Monats - 1 Tag
+  const endOfMonth = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
+  
+  const diffMs = today.getTime() - endOfMonth.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Findet fehlende Monate im Betrachtungsfenster
+ */
+function findMissingMonths(
+  monthsDates: Date[],
+  balanceMap: Map<string, number>
+): string[] {
+  const missing: string[] = [];
+  for (const d of monthsDates) {
+    const key = d.toISOString();
+    if (!balanceMap.has(key)) {
+      missing.push(key);
+    }
+  }
+  return missing;
 }
 
 /**
@@ -38,8 +95,8 @@ r.get("/accounts", validateQuery(QueryDashboardAccounts), async (req, res) => {
   let memberIds: Types.ObjectId[] = [];
   if (userId) {
     const userObjId = new Types.ObjectId(userId);
-    const members = await Member.find({ userId: userObjId }).select({ _id: 1 }).lean();
-    memberIds = members.map(m => new Types.ObjectId(m._id));
+    const members = await Member.find({ userId: userObjId }, { _id: 1 }).lean();
+    memberIds = members.map((m: any) => new Types.ObjectId(m._id));
   }
   if (memberId) {
     memberIds.push(new Types.ObjectId(memberId));
@@ -47,49 +104,92 @@ r.get("/accounts", validateQuery(QueryDashboardAccounts), async (req, res) => {
   if (memberIds.length === 0) return res.json([]); // kein Treffer
 
   // 2) Finde alle Accounts, an denen einer dieser Member beteiligt ist
-  const accounts = await Account.find({
-    "members.memberId": { $in: memberIds },
-  }).select({ name: 1, members: 1 }).lean();
+  const accounts = await Account.find(
+    { "members.memberId": { $in: memberIds } },
+    { name: 1, members: 1, settings: 1 }
+  ).lean();
 
   if (accounts.length === 0) return res.json([]);
 
-  const accountIds = accounts.map(a => new Types.ObjectId(a._id));
+  const accountIds = accounts.map((a: any) => new Types.ObjectId(a._id));
+  const today = new Date();
 
-  // 3) Hole Balances in einem Rutsch: für alle Accounts und die letzten N Monate
+  // 3) Hole ALLE Balances für diese Accounts (nicht nur letzte N Monate)
+  // um letzten verlässlichen Stand zu finden
+  const allBalances = await AccountBalance.find(
+    { accountId: { $in: accountIds } },
+    { accountId: 1, month: 1, closingBalanceMinor: 1 }
+  ).lean();
+
+  // Group balances by account
+  const balancesByAccount: Record<string, Array<{ month: Date; closingBalanceMinor: number }>> = {};
+  for (const b of allBalances) {
+    const aid = String(b.accountId);
+    if (!balancesByAccount[aid]) balancesByAccount[aid] = [];
+    balancesByAccount[aid].push({
+      month: b.month,
+      closingBalanceMinor: b.closingBalanceMinor ?? 0,
+    });
+  }
+
+  // 4) Für balanceHistory: Hole nur Balances im gewünschten Fenster
   const monthsDates = lastNMonthsDates(months);
   const firstMonth = monthsDates[0];
   const lastMonth = monthsDates[monthsDates.length - 1];
 
-  const balances = await AccountBalance.find({
-    accountId: { $in: accountIds },
-    month: { $gte: firstMonth, $lte: lastMonth },
-  }).select({ accountId: 1, month: 1, closingBalanceCents: 1 }).lean();
+  const windowBalances = await AccountBalance.find(
+    {
+      accountId: { $in: accountIds },
+      month: { $gte: firstMonth, $lte: lastMonth },
+    },
+    { accountId: 1, month: 1, closingBalanceMinor: 1 }
+  ).lean();
 
-  // Map: accountId -> Map(monthISO -> closingBalanceCents)
+  // Map: accountId -> Map(monthISO -> closingBalanceMinor)
   const byAccount: Record<string, Map<string, number>> = {};
-  for (const b of balances) {
+  for (const b of balanceData) {
     const aid = String(b.accountId);
-    const key = new Date(b.month).toISOString(); // exakt Tag 1, 00:00Z
+    const key = b.month.toISOString();
     if (!byAccount[aid]) byAccount[aid] = new Map();
-    byAccount[aid].set(key, b.closingBalanceCents ?? 0);
+    byAccount[aid].set(key, b.closingBalanceMinor ?? 0);
   }
 
-  // 4) Aggregiere Ergebnis
-  const result = accounts.map(acc => {
+  // 5) Aggregiere Ergebnis
+  const result = accounts.map((acc: any) => {
     const aid = String(acc._id);
-    const monthValues = monthsDates.map(d => {
+    const accountBalances = balancesByAccount[aid] ?? [];
+    
+    // Finde letzten verlässlichen Stand
+    const lastReliable = findLastReliableBalance(accountBalances, today);
+    
+    const currentBalanceMinor = lastReliable?.balanceMinor ?? 0;
+    const currentMonth = lastReliable?.month ?? today.toISOString();
+    
+    // Berechne Staleness
+    const stalenessDays = calculateStaleness(currentMonth, today);
+    const stalenessThreshold = (acc as any).settings?.alerts?.stalenessDays ?? DEFAULT_STALENESS_THRESHOLD_DAYS;
+    const isStale = stalenessDays > stalenessThreshold;
+    
+    // Balance History (reale Werte, keine 0-Fallbacks)
+    const balanceMap = byAccount[aid] ?? new Map();
+    const balanceHistoryMinor = monthsDates.map(d => {
       const key = d.toISOString();
-      // Falls kein Balance-Eintrag existiert -> 0 (du kannst hier auch null verwenden, wenn dir das lieber ist)
-      return byAccount[aid]?.get(key) ?? 0;
-    });
-    const currentBalance = monthValues[monthValues.length - 1] ?? 0;
+      return balanceMap.get(key);
+    }).filter((v): v is number => v !== undefined);
+    
+    // Fehlende Monate im Betrachtungsfenster
+    const missingMonths = findMissingMonths(monthsDates, balanceMap);
 
     return {
       id: aid,
       name: acc.name ?? null,
       memberCount: Array.isArray(acc.members) ? acc.members.length : 0,
-      currentBalance,
-      balanceHistory: monthValues, // älteste -> neueste
+      currentBalanceMinor,
+      currentMonth,
+      stalenessDays,
+      isStale,
+      balanceHistoryMinor,
+      missingMonths,
     };
   });
 

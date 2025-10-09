@@ -31,7 +31,7 @@ r.post("/", validateBody(CreateMemberIncome), async (req, res) => {
     data: {
       accountId: string;
       memberId: string;
-      amountCents: number;
+      amountMinor: number;
       fromMonth?: string | null;
       toMonth?: string | null;
     };
@@ -40,7 +40,7 @@ r.post("/", validateBody(CreateMemberIncome), async (req, res) => {
   const doc: Record<string, unknown> = {
     accountId: new Types.ObjectId(b.accountId),
     memberId: new Types.ObjectId(b.memberId),
-    amountCents: b.amountCents,
+    amountMinor: b.amountMinor,
     fromMonth: b.fromMonth ? toMonthDate(b.fromMonth) : null,
     toMonth: b.toMonth ? toMonthDate(b.toMonth) : null,
   };
@@ -52,7 +52,7 @@ r.post("/", validateBody(CreateMemberIncome), async (req, res) => {
     accountId: new Types.ObjectId(b.accountId),
     date: DateTime.utc().toJSDate(),
     code: "memberIncome.added",
-    params: { memberId: b.memberId, amountCents: b.amountCents },
+    params: { memberId: b.memberId, amountMinor: b.amountMinor },
     createdByMemberId: new Types.ObjectId(b.memberId),
   });
 
@@ -64,14 +64,14 @@ r.patch("/:id", validateBody(UpdateMemberIncome), async (req, res) => {
   const { id } = req.params;
 
   const u = (req as unknown as {
-    data: Partial<{ amountCents: number; fromMonth: string | null; toMonth: string | null }>;
+    data: Partial<{ amountMinor: number; fromMonth: string | null; toMonth: string | null }>;
   }).data;
 
   const existing = await MemberIncome.findById(id);
   if (!existing) return res.sendStatus(404);
 
   const patch: Record<string, unknown> = {};
-  if (typeof u.amountCents === "number") patch.amountCents = u.amountCents;
+  if (typeof u.amountMinor === "number") patch.amountMinor = u.amountMinor;
   if (u.fromMonth !== undefined) patch.fromMonth = u.fromMonth ? toMonthDate(u.fromMonth) : null;
   if (u.toMonth !== undefined) patch.toMonth = u.toMonth ? toMonthDate(u.toMonth) : null;
 
@@ -83,7 +83,7 @@ r.patch("/:id", validateBody(UpdateMemberIncome), async (req, res) => {
     accountId: updated.accountId as unknown as Types.ObjectId,
     date: DateTime.utc().toJSDate(),
     code: "memberIncome.updated",
-    params: { memberId: String(updated.memberId), amountCents: (updated as { amountCents?: number }).amountCents ?? 0 },
+    params: { memberId: String(updated.memberId), amountMinor: (updated as { amountMinor?: number }).amountMinor ?? 0 },
     createdByMemberId: updated.memberId as unknown as Types.ObjectId,
   });
 

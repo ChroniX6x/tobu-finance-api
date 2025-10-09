@@ -20,7 +20,7 @@ const ContributionRuleSchema = new Schema(
     type: { type: String, enum: ["base","additional","topup"], required: true },
     recurring: { type: Boolean, required: true },
     description: { type: String, default: null },
-    amountCents: { type: Number, required: true, min: 0 },
+    amountMinor: { type: Number, required: true, min: 0 },
     distribution: { type: DistributionSchema, required: true },
     fromMonth: { type: Date, default: null },
     toMonth: { type: Date, default: null },

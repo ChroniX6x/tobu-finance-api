@@ -6,13 +6,13 @@ const ISODate = z.string().datetime();
 export const CreateMemberIncome = z.object({
   accountId: ObjectId,
   memberId: ObjectId,
-  amountCents: z.number().int().nonnegative(),
+  amountMinor: z.number().int().nonnegative(),
   fromMonth: ISODate.nullish(),
   toMonth: ISODate.nullish(),
 });
 
 export const UpdateMemberIncome = z.object({
-  amountCents: z.number().int().nonnegative().optional(),
+  amountMinor: z.number().int().nonnegative().optional(),
   fromMonth: ISODate.nullish(),
   toMonth: ISODate.nullish(),
 });

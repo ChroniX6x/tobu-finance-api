@@ -3,7 +3,7 @@ const MemberIncomeSchema = new Schema(
   {
     accountId: { type: Types.ObjectId, required: true, ref: "Account" },
     memberId: { type: Types.ObjectId, required: true, ref: "Member" },
-    amountCents: { type: Number, required: true, min: 0 },
+    amountMinor: { type: Number, required: true, min: 0 },
     fromMonth: { type: Date, default: null },
     toMonth: { type: Date, default: null },
     source: { type: String, default: "salary" },

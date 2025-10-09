@@ -31,7 +31,7 @@ r.put("/", validateBody(UpsertCarryOver), async (req, res) => {
   };
   const update: any = {
     $set: {
-      amountCents: b.amountCents,
+      amountMinor: b.amountMinor,
       reason: b.reason ?? "",
     },
   };

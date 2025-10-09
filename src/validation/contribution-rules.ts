@@ -6,7 +6,7 @@ const ISODate = z.string().datetime(); // ISO (date-time). Für Monatsanker gibs
 export const CreateContributionRule = z.object({
   accountId: ObjectId,
   type: z.enum(["base", "additional", "topup"]),
-  amountCents: z.number().int().nonnegative(),
+  amountMinor: z.number().int().nonnegative(),
   distribution: z.unknown(), // wird serverseitig geprüft/verteilt
   fromMonth: ISODate.nullish(), // optional | null
   toMonth: ISODate.nullish(),   // optional | null
@@ -15,7 +15,7 @@ export const CreateContributionRule = z.object({
 
 export const UpdateContributionRule = z.object({
   type: z.enum(["base", "additional", "topup"]).optional(),
-  amountCents: z.number().int().nonnegative().optional(),
+  amountMinor: z.number().int().nonnegative().optional(),
   distribution: z.unknown().optional(),
   fromMonth: ISODate.nullish(), // .optional().nullable() durch .nullish()
   toMonth: ISODate.nullish(),

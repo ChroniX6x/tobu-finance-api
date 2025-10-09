@@ -27,7 +27,7 @@ r.put("/", validateBody(UpsertAccountBalance), async (req, res) => {
     accountId: new Types.ObjectId(b.accountId),
     month: toMonthDate(b.month),
   };
-  const update = { $set: { closingBalanceCents: b.closingBalanceCents } };
+  const update = { $set: { closingBalanceMinor: b.closingBalanceMinor } };
   const doc = await AccountBalance.findOneAndUpdate(key, update, { new: true, upsert: true });
   res.json(doc);
 });

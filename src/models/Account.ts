@@ -15,8 +15,9 @@ const AccountSettingsSchema = new Schema(
       topKCategories: { type: Number, min: 1, max: 10, default: 5 },
     },
     alerts: {
-      lowBalanceForecastCents: { type: Number, min: 0, default: 100_000 },
-      carryoverLargeCents: { type: Number, min: 0, default: 10_000 },
+      lowBalanceForecastMinor: { type: Number, min: 0, default: 100_000 },
+      carryoverLargeMinor: { type: Number, min: 0, default: 10_000 },
+      stalenessDays: { type: Number, min: 1, max: 365, default: 30 },
     },
   },
   { _id: false }

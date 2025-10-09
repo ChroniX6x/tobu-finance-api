@@ -31,7 +31,7 @@ r.post("/", validateBody(CreateCategoryBudget), async (req, res) => {
     data: {
       accountId: string;
       categoryId: string;
-      amountCents: number;
+      amountMinor: number;
       fromMonth?: string | null;
       toMonth?: string | null;
     };
@@ -40,7 +40,7 @@ r.post("/", validateBody(CreateCategoryBudget), async (req, res) => {
   const doc: Record<string, unknown> = {
     accountId: new Types.ObjectId(b.accountId),
     categoryId: new Types.ObjectId(b.categoryId),
-    amountCents: b.amountCents,
+    amountMinor: b.amountMinor,
     fromMonth: b.fromMonth ? toMonthDate(b.fromMonth) : null,
     toMonth: b.toMonth ? toMonthDate(b.toMonth) : null,
   };
@@ -52,7 +52,7 @@ r.post("/", validateBody(CreateCategoryBudget), async (req, res) => {
     accountId: new Types.ObjectId(b.accountId),
     date: DateTime.utc().toJSDate(),
     code: "categoryBudget.added",
-    params: { categoryId: b.categoryId, amountCents: b.amountCents },
+    params: { categoryId: b.categoryId, amountMinor: b.amountMinor },
     createdByMemberId: null,
   });
 
@@ -64,14 +64,14 @@ r.patch("/:id", validateBody(UpdateCategoryBudget), async (req, res) => {
   const { id } = req.params;
 
   const u = (req as unknown as {
-    data: Partial<{ amountCents: number; fromMonth: string | null; toMonth: string | null }>;
+    data: Partial<{ amountMinor: number; fromMonth: string | null; toMonth: string | null }>;
   }).data;
 
   const existing = await CategoryBudget.findById(id);
   if (!existing) return res.sendStatus(404);
 
   const patch: Record<string, unknown> = {};
-  if (typeof u.amountCents === "number") patch.amountCents = u.amountCents;
+  if (typeof u.amountMinor === "number") patch.amountMinor = u.amountMinor;
   if (u.fromMonth !== undefined) patch.fromMonth = u.fromMonth ? toMonthDate(u.fromMonth) : null;
   if (u.toMonth !== undefined) patch.toMonth = u.toMonth ? toMonthDate(u.toMonth) : null;
 
@@ -83,7 +83,7 @@ r.patch("/:id", validateBody(UpdateCategoryBudget), async (req, res) => {
     accountId: updated.accountId as unknown as Types.ObjectId,
     date: DateTime.utc().toJSDate(),
     code: "categoryBudget.updated",
-    params: { categoryId: String(updated.categoryId), amountCents: (updated as { amountCents?: number }).amountCents ?? 0 },
+    params: { categoryId: String(updated.categoryId), amountMinor: (updated as { amountMinor?: number }).amountMinor ?? 0 },
     createdByMemberId: null,
   });
 

@@ -33,7 +33,7 @@ r.post("/", validateBody(CreateTx), async (req, res) => {
     categoryId: b.categoryId ? new Types.ObjectId(b.categoryId) : null,
     title: b.title ?? null,
     type: b.type,
-    amountCents: b.amountCents,
+    amountMinor: b.amountMinor,
     month: b.month ? toMonthDate(b.month) : null,
     bookDate: b.bookDate ? new Date(b.bookDate) : null,
     status: b.status ?? "pending",
@@ -50,7 +50,7 @@ r.post("/", validateBody(CreateTx), async (req, res) => {
     params: {
       transactionId: String(created._id),
       type: doc.type,
-      amountCents: doc.amountCents,
+      amountMinor: doc.amountMinor,
       title: b.title ?? undefined,
       categoryId: b.categoryId ?? undefined,
     },
@@ -73,7 +73,7 @@ r.patch("/:id", async (req, res) => {
     categoryId: string | null;
     title: string | null;
     type: "income" | "expense";
-    amountCents: number;
+    amountMinor: number;
     month: string | null;
     bookDate: string | null;
     status: "pending" | "booked";
@@ -87,7 +87,7 @@ r.patch("/:id", async (req, res) => {
   if (u.categoryId !== undefined) patch.categoryId = u.categoryId ? new Types.ObjectId(u.categoryId) : null;
   if (u.title !== undefined) patch.title = u.title;
   if (u.type) patch.type = u.type;
-  if (typeof u.amountCents === "number") patch.amountCents = u.amountCents;
+  if (typeof u.amountMinor === "number") patch.amountMinor = u.amountMinor;
   if (u.month !== undefined && u.month) patch.month = toMonthDate(u.month);
   if (u.bookDate !== undefined) patch.bookDate = u.bookDate ? new Date(u.bookDate) : null;
   if (u.status) patch.status = u.status;
@@ -107,7 +107,7 @@ r.patch("/:id", async (req, res) => {
       params: {
         transactionId: String(updated._id),
         type: updated.type,
-        amountCents: updated.amountCents,
+        amountMinor: updated.amountMinor,
         title: updated.title ?? undefined,
         categoryId: updated.categoryId ? String(updated.categoryId) : undefined,
       },

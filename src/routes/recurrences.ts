@@ -35,7 +35,7 @@ r.post("/", validateBody(CreateRecurrence), async (req, res) => {
     categoryId: b.categoryId ? new Types.ObjectId(b.categoryId) : null,
     title: b.title ?? null,
     type: b.type,
-    amountCents: b.amountCents,
+    amountMinor: b.amountMinor,
     schedule: {
       freq: b.schedule?.freq ?? "monthly",
       dayOfMonth: b.schedule?.dayOfMonth ?? 1,

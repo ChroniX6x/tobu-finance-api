@@ -6,13 +6,13 @@ const ISODate = z.string().datetime();
 export const CreateCategoryBudget = z.object({
   accountId: ObjectId,
   categoryId: ObjectId,
-  amountCents: z.number().int().nonnegative(),
+  amountMinor: z.number().int().nonnegative(),
   fromMonth: ISODate.nullish(),
   toMonth: ISODate.nullish(),
 });
 
 export const UpdateCategoryBudget = z.object({
-  amountCents: z.number().int().nonnegative().optional(),
+  amountMinor: z.number().int().nonnegative().optional(),
   fromMonth: ISODate.nullish(),
   toMonth: ISODate.nullish(),
 });

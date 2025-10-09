@@ -4,7 +4,7 @@ const CarryOverSchema = new Schema(
     accountId: { type: Types.ObjectId, required: true, ref: "Account" },
     memberId: { type: Types.ObjectId, required: true, ref: "Member" },
     month: { type: Date, default: null },
-    amountCents: { type: Number, required: true }, // darf negativ sein
+    amountMinor: { type: Number, required: true }, // darf negativ sein
     reason: { type: String, default: "" },
     createdAt: { type: Date, default: () => new Date() }
   },

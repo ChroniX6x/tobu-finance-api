@@ -12,11 +12,11 @@ export function normalizeCustomSplit(
 
 export function incomeWeights(
   members: string[],
-  incomesByMemberCents: Record<string, number | undefined>
+  incomesByMemberMinor: Record<string, number | undefined>
 ): { memberId: string; weight: number }[] {
   let sum = 0;
   const vals = members.map((id) => {
-    const v = Math.max(0, Number(incomesByMemberCents[id] ?? 0));
+    const v = Math.max(0, Number(incomesByMemberMinor[id] ?? 0));
     sum += v;
     return { memberId: id, v };
   });
@@ -28,21 +28,21 @@ export function incomeWeights(
 }
 
 export function distribute(
-  amountCents: number,
+  amountMinor: number,
   dist: Dist,
   members: string[],
   incomeW: { memberId: string; weight: number }[]
 ): Record<string, number> {
   const out: Record<string, number> = {};
-  if (!amountCents) return out;
+  if (!amountMinor) return out;
 
   if (dist.mode === "perMember") {
-    out[dist.memberId] = (out[dist.memberId] ?? 0) + amountCents;
+    out[dist.memberId] = (out[dist.memberId] ?? 0) + amountMinor;
     return out;
   }
   if (dist.mode === "customSplit") {
     for (const s of normalizeCustomSplit(dist.customSplit || [])) {
-      out[s.memberId] = (out[s.memberId] ?? 0) + Math.round(amountCents * s.weight);
+      out[s.memberId] = (out[s.memberId] ?? 0) + Math.round(amountMinor * s.weight);
     }
     return out;
   }
@@ -50,7 +50,7 @@ export function distribute(
   for (const w of incomeW) map[w.memberId] = w.weight;
   for (const id of members) {
     const w = map[id] ?? 0;
-    out[id] = (out[id] ?? 0) + Math.round(amountCents * w);
+    out[id] = (out[id] ?? 0) + Math.round(amountMinor * w);
   }
   return out;
 }

@@ -22,14 +22,14 @@ type BuildParams = {
   currentMonthISO: string;
   pendingRecurringCount: number;
   extraContribCount: number;
-  extraContribSumCents: number;
-  forecastCents: number;
-  thresholdForecastCents: number;
-  carryovers: Array<{ memberId?: string | null; amountCents: number }>;
-  carryoverLargeCents: number;
-  overBudget: Array<{ categoryId: string; categoryName: string | null; actualCents: number; budgetCents: number }>;
-  missingBudget: Array<{ categoryId: string; categoryName: string | null; actualCents: number }>;
-  openDues: Array<{ memberId: string; monthlyDueCents: number; paidAmountCents: number }>;
+  extraContribSumMinor: number;
+  forecastMinor: number;
+  thresholdForecastMinor: number;
+  carryovers: Array<{ memberId?: string | null; amountMinor: number }>;
+  carryoverLargeMinor: number;
+  overBudget: Array<{ categoryId: string; categoryName: string | null; actualMinor: number; budgetMinor: number }>;
+  missingBudget: Array<{ categoryId: string; categoryName: string | null; actualMinor: number }>;
+  openDues: Array<{ memberId: string; monthlyDueMinor: number; paidAmountMinor: number }>;
 };
 
 export function buildInsights(p: BuildParams): Insight[] {
@@ -47,7 +47,7 @@ export function buildInsights(p: BuildParams): Insight[] {
       scope: "all",
       assigneeId: m.memberId,
       code: "due-open",
-      params: { memberId: m.memberId, monthISO, monthlyDueCents: m.monthlyDueCents, paidAmountCents: m.paidAmountCents },
+      params: { memberId: m.memberId, monthISO, monthlyDueMinor: m.monthlyDueMinor, paidAmountMinor: m.paidAmountMinor },
       entityRef: { type: "member", id: m.memberId },
       actions: [{ labelCode: "confirm", route: `/accounts/${p.accountId}/contributions?month=${monthISO}` }],
     });
@@ -76,7 +76,7 @@ export function buildInsights(p: BuildParams): Insight[] {
       severity: "info",
       scope: "all",
       code: "extra-contrib-active",
-      params: { count: p.extraContribCount, sumCents: p.extraContribSumCents, monthISO },
+      params: { count: p.extraContribCount, sumMinor: p.extraContribSumMinor, monthISO },
     });
   }
 
@@ -89,7 +89,7 @@ export function buildInsights(p: BuildParams): Insight[] {
       severity: "warn",
       scope: "all",
       code: "category-over-budget",
-      params: { categoryId: ob.categoryId, categoryName: ob.categoryName, monthISO, actualCents: ob.actualCents, budgetCents: ob.budgetCents },
+      params: { categoryId: ob.categoryId, categoryName: ob.categoryName, monthISO, actualMinor: ob.actualMinor, budgetMinor: ob.budgetMinor },
       entityRef: { type: "category", id: ob.categoryId },
       actions: [{ labelCode: "open_category_budget", route: `/accounts/${p.accountId}/budgets?month=${monthISO}&categoryId=${ob.categoryId}` }],
     });
@@ -104,16 +104,16 @@ export function buildInsights(p: BuildParams): Insight[] {
       severity: "info",
       scope: "all",
       code: "missing-budget",
-      params: { categoryId: mb.categoryId, categoryName: mb.categoryName, monthISO, actualCents: mb.actualCents },
+      params: { categoryId: mb.categoryId, categoryName: mb.categoryName, monthISO, actualMinor: mb.actualMinor },
       entityRef: { type: "category", id: mb.categoryId },
       actions: [{ labelCode: "open_category_budget", route: `/accounts/${p.accountId}/budgets?month=${monthISO}&categoryId=${mb.categoryId}` }],
     });
   }
 
   for (const c of p.carryovers) {
-    if (Math.abs(c.amountCents) >= p.carryoverLargeCents) {
+    if (Math.abs(c.amountMinor) >= p.carryoverLargeMinor) {
       const mid = c.memberId ? String(c.memberId) : "unknown";
-      out.push({
+      const insight: Insight = {
         id: `ins:carryover-large:${mid}:${monthISO}`,
         createdAt: now,
         month: monthISO,
@@ -121,14 +121,17 @@ export function buildInsights(p: BuildParams): Insight[] {
         severity: "warn",
         scope: "all",
         code: "carryover-large",
-        params: { memberId: c.memberId ?? null, monthISO, amountCents: c.amountCents },
-        entityRef: c.memberId ? { type: "member", id: mid } : undefined,
+        params: { memberId: c.memberId ?? null, monthISO, amountMinor: c.amountMinor },
         actions: [{ labelCode: "settle_carryover", route: `/accounts/${p.accountId}/carryovers?month=${monthISO}` }],
-      });
+      };
+      if (c.memberId) {
+        insight.entityRef = { type: "member", id: mid };
+      }
+      out.push(insight);
     }
   }
 
-  if (p.forecastCents < p.thresholdForecastCents) {
+  if (p.forecastMinor < p.thresholdForecastMinor) {
     out.push({
       id: `ins:balance-low-forecast:${monthISO}`,
       createdAt: now,
@@ -137,7 +140,7 @@ export function buildInsights(p: BuildParams): Insight[] {
       severity: "error",
       scope: "all",
       code: "balance-low-forecast",
-      params: { forecastCents: p.forecastCents, thresholdCents: p.thresholdForecastCents, monthISO },
+      params: { forecastMinor: p.forecastMinor, thresholdMinor: p.thresholdForecastMinor, monthISO },
       actions: [{ labelCode: "open_settings", route: `/accounts/${p.accountId}/settings` }],
     });
   }

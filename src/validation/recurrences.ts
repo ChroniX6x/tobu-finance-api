@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ObjId, MoneyCents, Month, ISODateTime } from "./common.js";
+import { ObjId, MoneyMinor, Month, ISODateTime } from "./common.js";
 
 const Schedule = z.object({
   freq: z.literal("monthly").optional().default("monthly"),
@@ -18,7 +18,7 @@ export const CreateRecurrence = z.object({
   categoryId: z.string().regex(/^[a-f\d]{24}$/i).nullish().optional(),
   title: z.string().nullish(),
   type: z.enum(["income","expense"]),
-  amountCents: MoneyCents,
+  amountMinor: MoneyMinor,
   schedule: Schedule.optional(),
   activeFrom: Month.nullish(),
   activeUntil: Month.nullish(),

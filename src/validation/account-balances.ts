@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ObjId, MoneyCents, Month } from "./common.js";
+import { ObjId, MoneyMinor, Month } from "./common.js";
 
 export const QueryAccountBalances = z.object({
   accountId: ObjId.optional(),
@@ -10,5 +10,5 @@ export const QueryAccountBalances = z.object({
 export const UpsertAccountBalance = z.object({
   accountId: ObjId,
   month: Month,
-  closingBalanceCents: MoneyCents
+  closingBalanceMinor: MoneyMinor
 });

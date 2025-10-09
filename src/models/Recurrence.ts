@@ -10,7 +10,7 @@ const RecurrenceSchema = new Schema(
     categoryId: { type: Types.ObjectId, ref: "Category", default: null },
     title: { type: String, default: null },
     type: { type: String, enum: ["income","expense"], required: true },
-    amountCents: { type: Number, required: true, min: 0 },
+    amountMinor: { type: Number, required: true, min: 0 },
     schedule: { type: ScheduleSchema, required: true },
     activeFrom: { type: Date, required: true },
     activeUntil: { type: Date, default: null },
