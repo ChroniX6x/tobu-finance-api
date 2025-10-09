@@ -147,7 +147,7 @@ r.get("/accounts", validateQuery(QueryDashboardAccounts), async (req, res) => {
 
   // Map: accountId -> Map(monthISO -> closingBalanceMinor)
   const byAccount: Record<string, Map<string, number>> = {};
-  for (const b of balanceData) {
+  for (const b of windowBalances) {
     const aid = String(b.accountId);
     const key = b.month.toISOString();
     if (!byAccount[aid]) byAccount[aid] = new Map();
