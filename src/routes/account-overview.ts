@@ -13,21 +13,14 @@ import CarryOver from "../models/CarryOver.js";
 import ContributionRule from "../models/ContributionRule.js";
 import Event from "../models/Event.js";
 
-import { monthRangeFromISO, lastNMonthAnchorsISO } from "../utils/date.js"; // kannst du lassen, wird noch benutzt
+import { toMonthAnchorISO, monthRangeFromISO, lastNMonthAnchorsISO, forwardFill } from "../utils/date.js";
 import { round1, linRegForecastNext } from "../utils/math.js";
 import { incomeWeights, distribute, type Dist } from "../utils/contrib.js";
 import { buildInsights } from "../services/insights.js";
 import { renderEventText } from "../utils/renderEvent.js";
-import {
-  computeReliableBalanceBlock,
-  buildCarriedSeries,
-  computeStalenessDays,
-  type BalanceSnapshot,
-} from "../utils/reliableBalance.js";
 
 const r = Router();
 
-/** GET /api/accounts/:id/overview */
 r.get("/:id/overview", async (req, res) => {
   const { id } = req.params;
   if (!/^[a-f\d]{24}$/i.test(id)) return res.status(400).json({ error: "INVALID_ID" });
@@ -36,25 +29,27 @@ r.get("/:id/overview", async (req, res) => {
   if (!account) return res.sendStatus(404);
 
   const accountId = new Types.ObjectId(id);
-
-  // Settings
   const historyMonths = account.settings?.dashboard?.historyMonths ?? 6;
   const topK = account.settings?.dashboard?.topKCategories ?? 5;
   const lowForecast = account.settings?.alerts?.lowBalanceForecastCents ?? 100_000;
   const carryoverLarge = account.settings?.alerts?.carryoverLargeCents ?? 10_000;
-  const staleDaysThreshold = (account as { settings?: { alerts?: { staleDaysThreshold?: number } } })?.settings?.alerts?.staleDaysThreshold ?? 30;
 
-  // current month ISO (Monatsanker)
+  // current month (ISO Monatsanker via Luxon)
   const now = DateTime.utc();
   const currentMonthISO = now.set({ day: 1, hour: 0, minute: 0, second: 0, millisecond: 0 }).toISO({ suppressMilliseconds: false }) as string;
   const { start: curStart, end: curEnd } = monthRangeFromISO(currentMonthISO);
 
-  // --- Mitglieder-Basisdaten ---
-  const memberIds = (account.members ?? []).map((m: unknown) => String((m as { memberId: unknown }).memberId));
+  // Mitglieder
+  const memberIds = (account.members ?? []).map((m: unknown) => {
+    const mm = m as { memberId: unknown };
+    return String(mm.memberId as unknown as string);
+  });
   const roleByMember: Record<string, "owner" | "member" | undefined> = {};
   for (const m of account.members ?? []) {
-    roleByMember[String((m as { memberId: unknown }).memberId)] = (m as { role?: "owner" | "member" }).role ?? "member";
+    const mm = m as { memberId: unknown; role?: "owner" | "member" };
+    roleByMember[String(mm.memberId as string)] = mm.role ?? "member";
   }
+
   const memberDocs = await Member.find({ _id: { $in: memberIds.map((x) => new Types.ObjectId(x)) } })
     .select({ name: 1, avatar: 1 })
     .lean();
@@ -65,50 +60,32 @@ r.get("/:id/overview", async (req, res) => {
     memberAvatarById[String(m._id)] = (m as { avatar?: string | null }).avatar ?? null;
   }
 
-  // --- Balance Snapshots (ECHT, unsortiert->sortiert ASC) ---
-  const sinceIso = DateTime.utc().minus({ months: Math.max(24, historyMonths + 2) }).set({ day: 1, hour: 0, minute: 0, second: 0, millisecond: 0 });
-  const balancesRaw = await AccountBalance.find({
+  // History Labels
+  const labelsISO = lastNMonthAnchorsISO(historyMonths, now.toJSDate());
+  const firstISO = labelsISO[0];
+  const lastISO = labelsISO[labelsISO.length - 1];
+
+  // Balances
+  const balances = await AccountBalance.find({
     accountId,
-    month: { $gte: sinceIso.toJSDate() },
+    month: { $gte: new Date(firstISO), $lt: monthRangeFromISO(lastISO).end },
   })
     .select({ month: 1, closingBalanceCents: 1 })
     .lean();
 
-  const snapshotsAsc: BalanceSnapshot[] = (balancesRaw as Array<{ month: Date; closingBalanceCents?: number }>)
-    .map((b) => ({ month: b.month, valueMinor: Number(b.closingBalanceCents ?? 0) }))
-    .sort((a, b) => a.month.getTime() - b.month.getTime());
+  const byISO: Record<string, number | undefined> = {};
+  for (const b of balances) {
+    const iso = toMonthAnchorISO((b as { month: Date }).month);
+    byISO[iso] = Number((b as { closingBalanceCents?: number }).closingBalanceCents ?? 0);
+  }
 
-  // Zuverlässiger Balance-Block + Change %
-  const rb = computeReliableBalanceBlock(snapshotsAsc);
+  const historyData = forwardFill(labelsISO, byISO);
+  const currentBalance = historyData[historyData.length - 1] ?? 0;
+  const prevBalance = historyData.length > 1 ? historyData[historyData.length - 2] : 0;
+  const balanceChangePct = prevBalance ? round1(((currentBalance - prevBalance) / prevBalance) * 100) : 0;
+  const forecast = linRegForecastNext(historyData);
 
-  // Staleness
-  // lastTransactionDate: max(bookDate, createdAt) über alle Transaktionen des Accounts
-  const lastTxAgg = await Transaction.aggregate([
-    { $match: { accountId } },
-    {
-      $project: {
-        refDate: {
-          $cond: [
-            { $ifNull: ["$bookDate", false] },
-            "$bookDate",
-            "$createdAt",
-          ],
-        },
-      },
-    },
-    { $sort: { refDate: -1 } },
-    { $limit: 1 },
-  ]);
-  const lastTransactionDate: Date | null = (lastTxAgg[0]?.refDate as Date | undefined) ?? null;
-
-  const rbMonthDate = DateTime.fromISO(rb.currentMonthIso, { zone: "utc" }).toJSDate();
-  const { stalenessDays, isStale } = computeStalenessDays(rbMonthDate, lastTransactionDate, staleDaysThreshold);
-
-  // --- Chart (carry-forward) ---
-  const carried = buildCarriedSeries(snapshotsAsc, historyMonths, now.toJSDate());
-  const forecast = linRegForecastNext(carried.dataMinor); // Forecast über die (carry-forward) Serie
-
-  // --- Income vs Expense (booked im aktuellen Monat) ---
+  // Income vs Expense (booked, current month)
   const txAgg = await Transaction.aggregate([
     { $match: { accountId, month: { $gte: curStart, $lt: curEnd }, status: "booked" } },
     { $group: { _id: "$type", sum: { $sum: "$amountCents" } } },
@@ -118,7 +95,7 @@ r.get("/:id/overview", async (req, res) => {
   const incomeSum = sumByType["income"] ?? 0;
   const expenseSum = sumByType["expense"] ?? 0;
 
-  // --- Top-Kategorien (Expenses, booked im aktuellen Monat) ---
+  // Top categories (booked expenses in current month)
   const topAgg = await Transaction.aggregate([
     { $match: { accountId, month: { $gte: curStart, $lt: curEnd }, status: "booked", type: "expense", categoryId: { $ne: null } } },
     { $group: { _id: "$categoryId", sum: { $sum: "$amountCents" } } },
@@ -134,7 +111,7 @@ r.get("/:id/overview", async (req, res) => {
     sum: x.sum ?? 0,
   }));
 
-  // --- Pending recurring ---
+  // Pending recurring (current month)
   const pendingRecurringCount = await Transaction.countDocuments({
     accountId,
     month: { $gte: curStart, $lt: curEnd },
@@ -142,7 +119,7 @@ r.get("/:id/overview", async (req, res) => {
     recurrenceId: { $ne: null },
   });
 
-  // --- Contribution Rules aktiv in M ---
+  // Contribution rules active this month
   const rules = await ContributionRule.find({
     accountId,
     $and: [
@@ -158,7 +135,7 @@ r.get("/:id/overview", async (req, res) => {
     addRules.reduce((a, r) => a + (r.amountCents ?? 0), 0) +
     topupRules.reduce((a, r) => a + (r.amountCents ?? 0), 0);
 
-  // --- Incomes aktiv in M (proRataIncome) ---
+  // Incomes active in current month (for proRataIncome)
   const incomes = await MemberIncome.find({
     accountId,
     $and: [
@@ -175,9 +152,10 @@ r.get("/:id/overview", async (req, res) => {
     const amt = Number((m as { amountCents?: number }).amountCents ?? 0);
     incomeByMember[k] = (incomeByMember[k] ?? 0) + amt;
   }
+
   const incWeights = incomeWeights(memberIds, incomeByMember);
 
-  // --- monthlyDue per member (Rules verteilen) ---
+  // monthlyDue per member
   const ensureDist = (r: unknown): Dist => {
     const d = (r as { distribution?: { mode?: string; memberId?: unknown; customSplit?: Array<{ memberId: unknown; split?: number }> } }).distribution ?? {};
     if (d.mode === "perMember") return { mode: "perMember", memberId: String(d.memberId ?? "") };
@@ -199,7 +177,7 @@ r.get("/:id/overview", async (req, res) => {
     addTo(dueByMember, part);
   }
 
-  // --- paidAmount (booked Income in M) ---
+  // paidAmount (booked income tx in current month)
   const paidAgg = await Transaction.aggregate([
     { $match: { accountId, month: { $gte: curStart, $lt: curEnd }, status: "booked", type: "income", paidByMemberId: { $ne: null } } },
     { $group: { _id: "$paidByMemberId", sum: { $sum: "$amountCents" } } },
@@ -221,7 +199,7 @@ r.get("/:id/overview", async (req, res) => {
     };
   });
 
-  // --- Budget Checks (nur für Insights) ---
+  // budgets check
   const expensesByCat = await Transaction.aggregate([
     { $match: { accountId, month: { $gte: curStart, $lt: curEnd }, status: "booked", type: "expense", categoryId: { $ne: null } } },
     { $group: { _id: "$categoryId", sum: { $sum: "$amountCents" } } },
@@ -252,12 +230,12 @@ r.get("/:id/overview", async (req, res) => {
     }
   }
 
-  // --- Carryovers (in M) ---
+  // carryovers (current month)
   const carryovers = await CarryOver.find({ accountId, month: { $gte: curStart, $lt: curEnd } })
     .select({ memberId: 1, amountCents: 1 })
     .lean();
 
-  // --- Insights (on-the-fly) ---
+  // insights
   const openDues = members.filter((m) => !m.paid).map((m) => ({ memberId: m.id, monthlyDueCents: m.monthlyDue, paidAmountCents: m.paidAmount }));
   const insights = buildInsights({
     accountId: String(accountId),
@@ -277,7 +255,7 @@ r.get("/:id/overview", async (req, res) => {
     openDues,
   });
 
-  // --- Timeline (letzte 20) ---
+  // timeline (letzte 20)
   const events = await Event.find({ accountId }).sort({ date: -1 }).limit(20).lean();
   const timeline = events.map((ev) => {
     const createdByMemberId = (ev as { createdByMemberId?: unknown }).createdByMemberId;
@@ -289,28 +267,17 @@ r.get("/:id/overview", async (req, res) => {
     };
   });
 
-  // --- Response ---
   res.json({
-    // NEU – zuverlässiger Block
     account: {
       id: String(accountId),
       name: (account as { name?: string | null }).name ?? null,
-
-      currentBalanceMinor: rb.currentBalanceMinor,
-      currentMonthIso: rb.currentMonthIso,
-      balanceChangePct: rb.balanceChangePct,
-      stalenessDays,
-      isStale,
-
-      // legacy Felder (kompatibel lassen, falls UI die noch nutzt)
-      currentMonth: rb.currentMonthIso,                                     // vorher "YYYY-MM-01T..." – bleibt ISO
-      currentBalance: rb.currentBalanceMinor,                                // Achtung: bisher evtl. in Cents? -> hier bewusst gleich gelassen
-      forecast,                                                              // in Cents (Minor)
+      currentMonth: currentMonthISO,
+      currentBalance,
+      balanceChangePct,
+      forecast,
       warning: forecast < lowForecast ? "Forecast unter Schwellenwert" : null,
     },
-
     members,
-
     quickStats: {
       openDuesCount: openDues.length,
       pendingRecurringCount,
@@ -318,17 +285,11 @@ r.get("/:id/overview", async (req, res) => {
       extraContributionsSum: extraContribSumCents,
       warningsCount: insights.filter((i) => i.kind === "warning" || i.kind === "critical").length,
     },
-
     charts: {
-      history: {
-        labels: carried.labelsIso,              // ISO
-        data: carried.dataMinor,                // Minor (Cents)
-        carried: carried.carried,               // boolean[]
-      },
-      incomeVsExpense: { income: incomeSum, expense: expenseSum }, // Minor
+      history: { labels: labelsISO, data: historyData },
+      incomeVsExpense: { income: incomeSum, expense: expenseSum },
       topCategories,
     },
-
     insights,
     timeline,
   });
