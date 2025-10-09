@@ -4,7 +4,7 @@ import Account from "../models/Account.js";
 import AccountBalance from "../models/AccountBalance.js";
 import Member from "../models/Member.js";
 import { validateQuery } from "../middleware/validate.js";
-import { QueryDashboardAccounts } from "../validation/dashboard.js";
+import { QueryAccountsSummary } from "../validation/accounts-summary.js";
 
 const r = Router();
 
@@ -79,12 +79,12 @@ function findMissingMonths(
 }
 
 /**
- * GET /api/dashboard/accounts?userId=... | ?memberId=... [&months=5]
- * Liefert kompakte Kacheldaten fürs Dashboard.
+ * GET /api/accounts/summary?userId=... | ?memberId=... [&months=5]
+ * Liefert kompakte Übersicht aller Accounts eines Users/Members.
  * - months: Anzahl Monate in balanceHistory (Standard 5, 1..24)
  * - Entweder userId (alle Member des Users -> deren Accounts) ODER memberId direkt
  */
-r.get("/accounts", validateQuery(QueryDashboardAccounts), async (req, res) => {
+r.get("/summary", validateQuery(QueryAccountsSummary), async (req, res) => {
   const { userId, memberId, months = 5 } = (req as any).q as {
     userId?: string;
     memberId?: string;

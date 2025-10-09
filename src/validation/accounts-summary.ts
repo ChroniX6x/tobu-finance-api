@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const ObjectId = z.string().regex(/^[a-f\d]{24}$/i, "Invalid ObjectId");
 
-export const QueryDashboardAccounts = z.object({
+export const QueryAccountsSummary = z.object({
   userId: ObjectId.optional(),
   memberId: ObjectId.optional(),
   months: z
