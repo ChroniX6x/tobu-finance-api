@@ -79,31 +79,31 @@ function findMissingMonths(
 }
 
 /**
- * GET /api/accounts/summary?userId=... | ?memberId=... [&months=5]
- * Liefert kompakte Übersicht aller Accounts eines Users/Members.
+ * GET /api/accounts/summary[?months=5]
+ * Liefert kompakte Übersicht aller Accounts des eingeloggten Users.
  * - months: Anzahl Monate in balanceHistory (Standard 5, 1..24)
- * - Entweder userId (alle Member des Users -> deren Accounts) ODER memberId direkt
+ * - Verwendet automatisch die userId aus dem JWT Token
+ * - Auth wird bereits zentral in server.ts durch requireAuth-Gate geprüft
  */
 r.get("/summary", validateQuery(QueryAccountsSummary), async (req, res) => {
-  const { userId, memberId, months = 5 } = (req as any).q as {
-    userId?: string;
-    memberId?: string;
+  const { months = 5 } = (req as any).q as {
     months?: number;
   };
 
-  // 1) Bestimme relevante memberIds
-  let memberIds: Types.ObjectId[] = [];
-  if (userId) {
-    const userObjId = new Types.ObjectId(userId);
-    const members = await Member.find({ userId: userObjId }, { _id: 1 }).lean();
-    memberIds = members.map((m: any) => new Types.ObjectId(m._id));
+  // 1) Hole userId aus dem eingeloggten User (JWT Token)
+  const loggedInUserId = req.user?.sub;
+  if (!loggedInUserId) {
+    return res.status(401).json({ error: "User not authenticated" });
   }
-  if (memberId) {
-    memberIds.push(new Types.ObjectId(memberId));
-  }
-  if (memberIds.length === 0) return res.json([]); // kein Treffer
 
-  // 2) Finde alle Accounts, an denen einer dieser Member beteiligt ist
+  // 2) Bestimme relevante memberIds für diesen User
+  const userObjId = new Types.ObjectId(loggedInUserId);
+  const members = await Member.find({ userId: userObjId }, { _id: 1 }).lean();
+  const memberIds = members.map((m: any) => new Types.ObjectId(m._id));
+  
+  if (memberIds.length === 0) return res.json([]); // User hat keine Members
+
+  // 3) Finde alle Accounts, an denen einer dieser Member beteiligt ist
   const accounts = await Account.find(
     { "members.memberId": { $in: memberIds } },
     { name: 1, members: 1, settings: 1 }
@@ -114,7 +114,7 @@ r.get("/summary", validateQuery(QueryAccountsSummary), async (req, res) => {
   const accountIds = accounts.map((a: any) => new Types.ObjectId(a._id));
   const today = new Date();
 
-  // 3) Hole ALLE Balances für diese Accounts (nicht nur letzte N Monate)
+  // 4) Hole ALLE Balances für diese Accounts (nicht nur letzte N Monate)
   // um letzten verlässlichen Stand zu finden
   const allBalances = await AccountBalance.find(
     { accountId: { $in: accountIds } },
@@ -132,7 +132,7 @@ r.get("/summary", validateQuery(QueryAccountsSummary), async (req, res) => {
     });
   }
 
-  // 4) Für balanceHistory: Hole nur Balances im gewünschten Fenster
+  // 5) Für balanceHistory: Hole nur Balances im gewünschten Fenster
   const monthsDates = lastNMonthsDates(months);
   const firstMonth = monthsDates[0];
   const lastMonth = monthsDates[monthsDates.length - 1];
@@ -154,7 +154,7 @@ r.get("/summary", validateQuery(QueryAccountsSummary), async (req, res) => {
     byAccount[aid].set(key, b.closingBalanceMinor ?? 0);
   }
 
-  // 5) Aggregiere Ergebnis
+  // 6) Aggregiere Ergebnis
   const result = accounts.map((acc: any) => {
     const aid = String(acc._id);
     const accountBalances = balancesByAccount[aid] ?? [];
