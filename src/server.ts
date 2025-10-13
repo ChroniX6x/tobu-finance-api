@@ -37,6 +37,9 @@ app.use(morgan("dev"));
 app.get("/health", (_req,res)=>res.json({ok:true}));
 
 app.use("/api/members", members);
+// Wichtig: Spezifische account-Routen VOR dem generischen accounts-Router!
+app.use("/api/accounts", accountsSummaryRouter);
+app.use("/api/accounts", accountOverviewRouter);
 app.use("/api/accounts", accounts);
 app.use("/api/categories", categories);
 app.use("/api/transactions", transactions);
@@ -48,8 +51,6 @@ app.use("/api/account-balances", balances);
 app.use("/api/category-budgets", budgets);
 
 app.use(docsRouter); // stellt /docs und /openapi.json bereit
-app.use("/api/accounts", accountsSummaryRouter);
-app.use("/api/accounts", accountOverviewRouter);
 
 app.get("/health/migrations", async (_req, res) => {
     const client = new MongoClient(process.env.MONGODB_URI!);

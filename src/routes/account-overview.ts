@@ -224,8 +224,8 @@ r.get("/:id/overview", async (req, res) => {
       name: memberNameById[mid] ?? null,
       role: roleByMember[mid],
       avatar: memberAvatarById[mid] ?? null,
-      monthlyDue,
-      paidAmount,
+      monthlyDueMinor: monthlyDue,
+      paidAmountMinor: paidAmount,
       paid: paidAmount >= monthlyDue,
     };
   });
@@ -271,7 +271,7 @@ r.get("/:id/overview", async (req, res) => {
   ).lean();
 
   // insights
-  const openDues = members.filter((m: any) => !m.paid).map((m: any) => ({ memberId: m.id, monthlyDueMinor: m.monthlyDue, paidAmountMinor: m.paidAmount }));
+  const openDues = members.filter((m: any) => !m.paid).map((m: any) => ({ memberId: m.id, monthlyDueMinor: m.monthlyDueMinor, paidAmountMinor: m.paidAmountMinor }));
   const insights = buildInsights({
     accountId: String(accountId),
     currentMonthISO,
@@ -320,7 +320,7 @@ r.get("/:id/overview", async (req, res) => {
       openDuesCount: openDues.length,
       pendingRecurringCount,
       extraContributionsCount: extraContribCount,
-      extraContributionsSumMinor: extraContribSumCents,
+      extraContributionsSumMinor: extraContribSumMinor,
       warningsCount: insights.filter((i) => i.kind === "warning" || i.kind === "critical").length,
     },
     charts: {
