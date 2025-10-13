@@ -44,6 +44,7 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
+    "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]                  // Alias wie im FE (dort src/app/*), hier sinnvoller: src/*
     },

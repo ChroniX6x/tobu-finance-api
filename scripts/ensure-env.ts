@@ -20,9 +20,23 @@ function parseEnv(content: string): Record<string, string> {
 function stringifyEnv(obj: Record<string, string>, order?: string[]) {
   const keys = order ?? Object.keys(obj);
   const lines: string[] = [];
+  const seen = new Set<string>();
+  
+  // Erst alle Keys in der vorgegebenen Order
   for (const k of keys) {
-    if (k in obj) lines.push(`${k}=${obj[k]}`);
+    if (k in obj) {
+      lines.push(`${k}=${obj[k]}`);
+      seen.add(k);
+    }
   }
+  
+  // Dann alle neuen Keys, die nicht in der Order waren
+  for (const k of Object.keys(obj)) {
+    if (!seen.has(k)) {
+      lines.push(`${k}=${obj[k]}`);
+    }
+  }
+  
   lines.push(""); // newline am Ende
   return lines.join("\n");
 }
@@ -66,14 +80,22 @@ function ensureKeypair(env: Record<string, string>, privKeyName: string, pubKeyN
 }
 
 function loadEnvWithOrder(): { data: Record<string, string>; order: string[] } {
-  const base = existsSync(envPath)
-    ? readFileSync(envPath, "utf8")
-    : readFileSync(examplePath, "utf8");
-  const order = base
+  // Immer .env.example als Basis für Struktur und Defaults laden
+  const exampleContent = readFileSync(examplePath, "utf8");
+  const exampleData = parseEnv(exampleContent);
+  const order = exampleContent
     .split(/\r?\n/)
     .map((l) => (l.match(/^\s*([A-Z0-9_]+)\s*=/i)?.[1] ?? ""))
     .filter(Boolean);
-  const data = parseEnv(base);
+  
+  // Falls .env existiert, Werte daraus übernehmen (überschreiben example)
+  let data = { ...exampleData };
+  if (existsSync(envPath)) {
+    const envContent = readFileSync(envPath, "utf8");
+    const envData = parseEnv(envContent);
+    data = { ...exampleData, ...envData };
+  }
+  
   return { data, order };
 }
 

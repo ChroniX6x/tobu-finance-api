@@ -57,7 +57,7 @@ const AuthSessionSchema = new Schema<IAuthSession>(
     ip: String,
     rotatedAt: Date,
     revokedAt: { type: Date, index: true },
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: true }, // index: true entfernt, da TTL-Index unten definiert
   },
   { timestamps: true }
 );
