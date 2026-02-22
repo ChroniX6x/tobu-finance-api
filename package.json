@@ -16,7 +16,7 @@
     "start": "set NODE_ENV=production&& node dist/src/server.js",
     "seed": "tsx scripts/seed.ts",
     "link-test-users": "tsx scripts/link-users-to-members.ts",
-    "mongod": "mongod --dbpath D:\\mogodb\\db",
+    "mongod": "mongod --dbpath D:\\mongodb\\db",
     "revert": "tsx scripts/revertHalfMigration.ts"
   },
   "keywords": [],
