@@ -11,6 +11,7 @@ const RecurrenceSchema = new Schema(
     title: { type: String, default: null },
     type: { type: String, enum: ["income","expense"], required: true },
     amountMinor: { type: Number, required: true, min: 0 },
+    isFromSharedAccount: { type: Boolean, default: null },
     schedule: { type: ScheduleSchema, required: true },
     activeFrom: { type: Date, required: true },
     activeUntil: { type: Date, default: null },
