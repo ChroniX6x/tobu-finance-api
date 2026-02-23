@@ -1,0 +1,60 @@
+[{
+  "_id": {
+    "$oid": "68ed6c5c2f28cfe34b593e4c"
+  },
+  "email": "tony@test.de",
+  "emailNormalized": "tony@test.de",
+  "name": "Tony",
+  "passwordHash": "$argon2id$v=19$m=65536,t=3,p=4$Xy5RU8fa7FoCkgVwLn6qjQ$ymSU91t6Et5m4BfujLdz47+cPQqSnYaWyWy6oNPIG3I",
+  "roles": [
+    "user"
+  ],
+  "isActive": true,
+  "createdAt": {
+    "$date": "2025-10-13T21:17:16.604Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-13T21:17:16.604Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68ed6e732f28cfe34b593e55"
+  },
+  "email": "caro@test.de",
+  "emailNormalized": "caro@test.de",
+  "name": "Carolin",
+  "passwordHash": "$argon2id$v=19$m=65536,t=3,p=4$gcSv5OQwNcjtKGjJQGSGlA$GuQojlA2hy9rw9gENwhDK/yMWqys1J5SdN+mi2bJo7A",
+  "roles": [
+    "user"
+  ],
+  "isActive": true,
+  "createdAt": {
+    "$date": "2025-10-13T21:26:11.987Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-13T21:26:11.987Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68ed700d2f28cfe34b593e5f"
+  },
+  "email": "test@test.de",
+  "emailNormalized": "test@test.de",
+  "name": "Test",
+  "passwordHash": "$argon2id$v=19$m=65536,t=3,p=4$sJIOigYRLuI8VPpannYQKQ$U9XiLMzLQNk29K+HoOMpPUB7RjPX2sVpE0OvshBSoQs",
+  "roles": [
+    "user"
+  ],
+  "isActive": true,
+  "createdAt": {
+    "$date": "2025-10-13T21:33:01.065Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-13T21:33:01.065Z"
+  },
+  "__v": 0
+}]

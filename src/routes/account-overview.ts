@@ -66,7 +66,9 @@ r.get("/:id/overview", async (req, res) => {
   const firstISO = labelsISO[0];
   const lastISO = labelsISO[labelsISO.length - 1];
 
-  // Balances
+  const today = now.toJSDate();
+
+  // Balances für History-Chart (nur im Fenster)
   const balances = await AccountBalance.find(
     {
       accountId,
@@ -82,16 +84,14 @@ r.get("/:id/overview", async (req, res) => {
   }
 
   const historyData = forwardFill(labelsISO, byISO);
-  
-  // Letzter verlässlicher Stand (≤ heute)
-  const today = now.toJSDate();
-  const reliableBalances = balances.filter(b => (b as { month: Date }).month <= today);
-  const lastReliable = reliableBalances.length > 0
-    ? reliableBalances.reduce((latest, curr) => {
-        return (curr as { month: Date }).month > (latest as { month: Date }).month ? curr : latest;
-      })
-    : null;
-  
+
+  // Letzter verlässlicher Stand – separat abfragen, unabhängig vom History-Fenster
+  // Wichtig: Limitierung auf historyMonths würde ältere, aber gültige Salden ignorieren
+  const lastReliable = await AccountBalance.findOne(
+    { accountId, month: { $lte: today } },
+    { month: 1, closingBalanceMinor: 1 }
+  ).sort({ month: -1 }).lean();
+
   const currentBalanceMinor = lastReliable
     ? Number((lastReliable as { closingBalanceMinor?: number }).closingBalanceMinor ?? 0)
     : 0;

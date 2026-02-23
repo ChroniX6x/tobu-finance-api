@@ -6,7 +6,7 @@ info:
     REST API for ToBu-Finance using the v2 data model.
     Conventions:
       - ObjectIds are 24-hex strings
-      - Money values are integer cents
+      - Money values are integer minor units (e.g., cents)
       - Month inputs are ISO 8601 strings in UTC normalized to the month anchor: first day 00:00:00.000Z
 servers:
   - url: http://localhost:4000
@@ -694,10 +694,11 @@ paths:
       responses:
         '204': { description: Deleted }
         '404': { $ref: '#/components/responses/NotFound' }
-  /api/dashboard/accounts:
+
+  /api/accounts/summary:
     get:
-      summary: Dashboard accounts for a user/member
-      description: Returns compact cards for all accounts where the user participates (via members).
+      summary: Get accounts summary for a user/member
+      description: Returns a summary view of all accounts where the user participates, including balance history and staleness information.
       parameters:
         - in: query
           name: userId
@@ -717,13 +718,13 @@ paths:
             default: 5
       responses:
         '200':
-          description: Dashboard accounts
+          description: Accounts summary
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/DashboardAccount'
+                  $ref: '#/components/schemas/AccountsSummaryItem'
   /api/accounts/{id}/overview:
     parameters:
       - $ref: '#/components/parameters/IdParam'
@@ -861,7 +862,7 @@ components:
         categoryId: { $ref: '#/components/schemas/ObjectId', nullable: true }
         title: { type: string, nullable: true }
         type: { type: string, enum: [income, expense] }
-        amountCents: { type: integer, minimum: 0 }
+        amountMinor: { type: integer, minimum: 0 }
         month: { type: string, format: date-time, nullable: true }
         bookDate: { type: string, format: date-time, nullable: true }
         status: { type: string, enum: [booked, pending], default: pending }
@@ -870,13 +871,13 @@ components:
         recurrenceId: { $ref: '#/components/schemas/ObjectId', nullable: true }
     TransactionCreate:
       type: object
-      required: [accountId, type, amountCents]
+      required: [accountId, type, amountMinor]
       properties:
         accountId: { $ref: '#/components/schemas/ObjectId' }
         categoryId: { $ref: '#/components/schemas/ObjectId', nullable: true }
         title: { type: string, nullable: true }
         type: { type: string, enum: [income, expense] }
-        amountCents: { type: integer, minimum: 0 }
+        amountMinor: { type: integer, minimum: 0 }
         month: { $ref: '#/components/schemas/Month' }
         bookDate: { type: string, format: date-time, nullable: true }
         status: { type: string, enum: [booked, pending], default: pending }
@@ -899,7 +900,7 @@ components:
         categoryId: { $ref: '#/components/schemas/ObjectId', nullable: true }
         title: { type: string, nullable: true }
         type: { type: string, enum: [income, expense] }
-        amountCents: { type: integer, minimum: 0 }
+        amountMinor: { type: integer, minimum: 0 }
         schedule: { $ref: '#/components/schemas/RecurrenceSchedule' }
         activeFrom: { type: string, format: date-time }
         activeUntil: { type: string, format: date-time, nullable: true }
@@ -908,13 +909,13 @@ components:
         lastEmitted: { type: string, format: date-time, nullable: true }
     RecurrenceCreate:
       type: object
-      required: [accountId, type, amountCents]
+      required: [accountId, type, amountMinor]
       properties:
         accountId: { $ref: '#/components/schemas/ObjectId' }
         categoryId: { $ref: '#/components/schemas/ObjectId', nullable: true }
         title: { type: string, nullable: true }
         type: { type: string, enum: [income, expense] }
-        amountCents: { type: integer, minimum: 0 }
+        amountMinor: { type: integer, minimum: 0 }
         schedule: { $ref: '#/components/schemas/RecurrenceSchedule' }
         activeFrom: { $ref: '#/components/schemas/Month' }
         activeUntil: { $ref: '#/components/schemas/Month' }
@@ -930,18 +931,18 @@ components:
         _id: { $ref: '#/components/schemas/ObjectId' }
         accountId: { $ref: '#/components/schemas/ObjectId' }
         memberId: { $ref: '#/components/schemas/ObjectId' }
-        amountCents: { type: integer, minimum: 0 }
+        amountMinor: { type: integer, minimum: 0 }
         fromMonth: { type: string, format: date-time, nullable: true }
         toMonth: { type: string, format: date-time, nullable: true }
         source: { type: string, nullable: true }
         note: { type: string, nullable: true }
     MemberIncomeCreate:
       type: object
-      required: [accountId, memberId, amountCents]
+      required: [accountId, memberId, amountMinor]
       properties:
         accountId: { $ref: '#/components/schemas/ObjectId' }
         memberId: { $ref: '#/components/schemas/ObjectId' }
-        amountCents: { type: integer, minimum: 0 }
+        amountMinor: { type: integer, minimum: 0 }
         fromMonth: { $ref: '#/components/schemas/Month' }
         toMonth: { $ref: '#/components/schemas/Month' }
         source: { type: string, nullable: true }
@@ -987,7 +988,7 @@ components:
         type: { type: string, enum: [base, additional, topup] }
         recurring: { type: boolean }
         description: { type: string, nullable: true }
-        amountCents: { type: integer, minimum: 0 }
+        amountMinor: { type: integer, minimum: 0 }
         distribution: { $ref: '#/components/schemas/ContributionDistribution' }
         fromMonth: { type: string, format: date-time, nullable: true }
         toMonth: { type: string, format: date-time, nullable: true }
@@ -997,13 +998,13 @@ components:
             legacyTopUpDate: { type: string, nullable: true }
     ContributionRuleCreate:
       type: object
-      required: [accountId, type, recurring, amountCents, distribution]
+      required: [accountId, type, recurring, amountMinor, distribution]
       properties:
         accountId: { $ref: '#/components/schemas/ObjectId' }
         type: { type: string, enum: [base, additional, topup] }
         recurring: { type: boolean }
         description: { type: string, nullable: true }
-        amountCents: { type: integer, minimum: 0 }
+        amountMinor: { type: integer, minimum: 0 }
         distribution: { $ref: '#/components/schemas/ContributionDistribution' }
         fromMonth: { $ref: '#/components/schemas/Month' }
         toMonth: { $ref: '#/components/schemas/Month' }
@@ -1022,7 +1023,7 @@ components:
         accountId: { $ref: '#/components/schemas/ObjectId' }
         memberId: { $ref: '#/components/schemas/ObjectId' }
         month: { type: string, format: date-time }
-        amountCents:
+        amountMinor:
           type: integer
           description: May be negative
         reason: { type: string, nullable: true }
@@ -1030,12 +1031,12 @@ components:
 
     CarryOverUpsert:
       type: object
-      required: [accountId, memberId, month, amountCents]
+      required: [accountId, memberId, month, amountMinor]
       properties:
         accountId: { $ref: '#/components/schemas/ObjectId' }
         memberId: { $ref: '#/components/schemas/ObjectId' }
         month: { $ref: '#/components/schemas/Month' }
-        amountCents:
+        amountMinor:
           type: integer
           description: May be negative
         reason: { type: string, nullable: true }
@@ -1046,16 +1047,16 @@ components:
         _id: { $ref: '#/components/schemas/ObjectId' }
         accountId: { $ref: '#/components/schemas/ObjectId' }
         month: { type: string, format: date-time }
-        closingBalanceCents:
+        closingBalanceMinor:
           type: integer
           description: May be negative
     AccountBalanceUpsert:
       type: object
-      required: [accountId, month, closingBalanceCents]
+      required: [accountId, month, closingBalanceMinor]
       properties:
         accountId: { $ref: '#/components/schemas/ObjectId' }
         month: { $ref: '#/components/schemas/Month' }
-        closingBalanceCents:
+        closingBalanceMinor:
           type: integer
           description: May be negative
 
@@ -1065,13 +1066,13 @@ components:
         _id: { $ref: '#/components/schemas/ObjectId' }
         accountId: { $ref: '#/components/schemas/ObjectId' }
         categoryId: { $ref: '#/components/schemas/ObjectId' }
-        amountCents: { type: integer, minimum: 0 }
+        amountMinor: { type: integer, minimum: 0 }
         fromMonth: { type: string, format: date-time, nullable: true }
         toMonth: { type: string, format: date-time, nullable: true }
 
-    DashboardAccount:
+    AccountsSummaryItem:
       type: object
-      required: [id, name, memberCount, currentBalance, balanceHistory]
+      required: [id, name, memberCount, currentBalanceMinor, currentMonth, stalenessDays, isStale, balanceHistoryMinor, missingMonths]
       properties:
         id:
           type: string
@@ -1083,16 +1084,32 @@ components:
         memberCount:
           type: integer
           minimum: 0
-        currentBalance:
+        currentBalanceMinor:
           type: integer
-          description: Closing balance of the latest month in cents
+          description: Closing balance of the latest reliable month in minor units
           example: 123456
-        balanceHistory:
+        currentMonth:
+          type: string
+          format: date-time
+          description: ISO date of the last reliable balance month
+        stalenessDays:
+          type: integer
+          description: Days since the end of the last reliable balance month
+        isStale:
+          type: boolean
+          description: Whether the account data is considered stale
+        balanceHistoryMinor:
           type: array
-          description: Monthly closing balances in cents, oldest to newest
+          description: Monthly closing balances in minor units for the requested window (only months with data)
           items:
             type: integer
           example: [100000, 105000, 99000, 120000, 123456]
+        missingMonths:
+          type: array
+          description: ISO dates of months in the requested window that have no balance data
+          items:
+            type: string
+            format: date-time
 
     AccountOverview:
       type: object
@@ -1120,7 +1137,7 @@ components:
 
     AccountOverviewAccount:
       type: object
-      required: [id, currentMonth, currentBalance, balanceChangePct, forecast]
+      required: [id, currentMonth, currentBalanceMinor, stalenessDays, isStale, missingMonths, balanceChangePct, forecastMinor]
       properties:
         id:
           type: string
@@ -1128,41 +1145,46 @@ components:
           example: "60d21b4667d0d8992e610c85"
         name: { type: string, nullable: true }
         currentMonth: { type: string, format: date-time }
-        currentBalance: { type: integer }
+        currentBalanceMinor: { type: integer }
+        stalenessDays: { type: integer }
+        isStale: { type: boolean }
+        missingMonths:
+          type: array
+          items: { type: string, format: date-time }
         balanceChangePct: { type: number }
-        forecast: { type: integer }
+        forecastMinor: { type: integer }
         warning: { type: string, nullable: true }
 
     AccountOverviewMember:
       type: object
-      required: [id, monthlyDue, paidAmount, paid]
+      required: [id, monthlyDueMinor, paidAmountMinor, paid]
       properties:
         id: { $ref: '#/components/schemas/ObjectId' }
         name: { type: string, nullable: true }
         role: { type: string, enum: [owner, member], nullable: true }
         avatar: { type: string, nullable: true }
-        monthlyDue: { type: integer }
-        paidAmount: { type: integer }
+        monthlyDueMinor: { type: integer }
+        paidAmountMinor: { type: integer }
         paid: { type: boolean }
 
     AccountOverviewQuickStats:
       type: object
-      required: [openDuesCount, pendingRecurringCount, extraContributionsCount, extraContributionsSum, warningsCount]
+      required: [openDuesCount, pendingRecurringCount, extraContributionsCount, extraContributionsSumMinor, warningsCount]
       properties:
         openDuesCount: { type: integer }
         pendingRecurringCount: { type: integer }
         extraContributionsCount: { type: integer }
-        extraContributionsSum: { type: integer }
+        extraContributionsSumMinor: { type: integer }
         warningsCount: { type: integer }
 
     AccountOverviewCharts:
       type: object
-      required: [history, incomeVsExpense, topCategories]
+      required: [history, incomeVsExpenseMinor, topCategories]
       properties:
         history:
           $ref: '#/components/schemas/AccountOverviewChartHistory'
-        incomeVsExpense:
-          $ref: '#/components/schemas/AccountOverviewChartIncomeVsExpense'
+        incomeVsExpenseMinor:
+          $ref: '#/components/schemas/AccountOverviewChartIncomeVsExpenseMinor'
         topCategories:
           type: array
           items:
@@ -1178,22 +1200,22 @@ components:
           items: { type: string, format: date-time }
         data:
           type: array
-          description: Monthly closing balances in cents (forward-filled), oldest to newest
+          description: Monthly closing balances in minor units (forward-filled), oldest to newest
           items: { type: integer }
 
-    AccountOverviewChartIncomeVsExpense:
+    AccountOverviewChartIncomeVsExpenseMinor:
       type: object
-      required: [income, expense]
+      required: [incomeMinor, expenseMinor]
       properties:
-        income: { type: integer }
-        expense: { type: integer }
+        incomeMinor: { type: integer }
+        expenseMinor: { type: integer }
 
     AccountOverviewTopCategory:
       type: object
-      required: [sum]
+      required: [sumMinor]
       properties:
         name: { type: string, nullable: true }
-        sum: { type: integer }
+        sumMinor: { type: integer }
 
     Insight:
       type: object

@@ -238,6 +238,7 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
               title: r.title ?? null,
               type: r.type,
               amountCents: centsOrZero(r.amount, `recurrences.amount (${legacyKeyOf(r)})`),
+              isFromSharedAccount: r.isFromSharedAccount ?? null,
               schedule: { freq: "monthly", dayOfMonth: 1 },
               activeFrom: new Date(),
               activeUntil: null,
@@ -394,6 +395,9 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
       if (await hasCollection(db, n)) await dropIf(db, n);
       if (await hasCollection(db, NEW(n))) await safeRename(db, NEW(n), n);
     }
+
+    // transactionTemplates droppen – wurde in recurrences überführt, ist nicht in FINAL_NAMES
+    if (hasTemplates) await dropIf(db, "transactionTemplates");
 
     // Restliche __new__ entfernen (Safety)
     const rest = await db.listCollections().toArray();
