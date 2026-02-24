@@ -18,9 +18,9 @@ export function monthFromBookDate(bookDate: string): Date {
 
 /** Derive the month anchor from a YYYY-MM string. */
 export function monthFromYYYYMM(ym: string): Date {
-  const parts = ym.split("-");
-  const y = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
+  const [yr, mo] = ym.split("-");
+  const y = parseInt(yr!, 10);
+  const m = parseInt(mo!, 10);
   return new Date(Date.UTC(y, m - 1, 1));
 }
 
@@ -100,7 +100,16 @@ export const QueryTx = z.object({
   monthFrom: Month.optional(),
   monthTo: Month.optional(),
   status: TxStatus.optional(),
+  /** Full-text search on title + notes (Phase 1: parents only). */
+  q: z.string().min(1).max(200).optional(),
+  /**
+   * Filter by parentTransactionId.
+   * Pass "null" to list only top-level parents (default behaviour of the list endpoint).
+   * Pass an ObjectId to list children of a specific parent (used by autocomplete internally).
+   * Omitting this param is equivalent to passing "null".
+   */
+  parentTransactionId: z.union([ObjId, z.literal("null")]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
-  sort: z.enum(["dateDesc", "dateAsc", "amountDesc", "amountAsc"]).default("dateDesc"),
+  sort: z.enum(["bookDateDesc", "bookDateAsc", "amountDesc", "amountAsc"]).default("bookDateDesc"),
 });

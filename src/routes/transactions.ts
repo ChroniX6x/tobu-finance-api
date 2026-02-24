@@ -31,28 +31,68 @@ async function sumChildren(parentId: Types.ObjectId, excludeId?: Types.ObjectId)
 // ─── GET /api/transactions ────────────────────────────────────────────────────
 
 r.get("/", validateQuery(QueryTx), async (req, res) => {
-  const { accountId, month, monthFrom, monthTo, status, page, pageSize, sort } = (req as any).q;
+  const { accountId, month, monthFrom, monthTo, status, q: search, parentTransactionId: ptxId, page, pageSize, sort } = (req as any).q;
 
-  const q: Record<string, unknown> = { accountId: new Types.ObjectId(accountId) };
-  if (status) q.status = status;
+  // Determine mode: parent-list mode (default) vs. child-list mode (explicit ObjectId)
+  const isParentMode = !ptxId || ptxId === "null";
+
+  const filter: Record<string, unknown> = {
+    accountId: new Types.ObjectId(accountId),
+    parentTransactionId: isParentMode ? null : new Types.ObjectId(ptxId),
+  };
+
+  if (status) filter.status = status;
 
   if (month) {
-    q.month = monthFromYYYYMM(month);
+    filter.month = monthFromYYYYMM(month);
   } else if (monthFrom || monthTo) {
     const range: Record<string, Date> = {};
     if (monthFrom) range.$gte = monthFromYYYYMM(monthFrom);
     if (monthTo) range.$lte = monthFromYYYYMM(monthTo);
-    q.month = range;
+    filter.month = range;
+  }
+
+  if (search) {
+    filter.$or = [
+      { title: { $regex: search, $options: "i" } },
+      { notes: { $regex: search, $options: "i" } },
+    ];
   }
 
   const sortField = sort.startsWith("amount") ? "amountMinor" : "bookDate";
   const sortDir = sort.endsWith("Asc") ? 1 : -1;
   const skip = (page - 1) * pageSize;
 
-  const [items, total] = await Promise.all([
-    Transaction.find(q).sort({ [sortField]: sortDir, _id: 1 }).skip(skip).limit(pageSize).lean(),
-    Transaction.countDocuments(q),
+  const [parents, total] = await Promise.all([
+    Transaction.find(filter).sort({ [sortField]: sortDir, _id: 1 }).skip(skip).limit(pageSize).lean(),
+    Transaction.countDocuments(filter),
   ]);
+
+  let items: unknown[];
+
+  if (isParentMode && parents.length > 0) {
+    // Batch-fetch all children for the returned page of parents in one query
+    const parentIds = parents.map((p) => p._id);
+    const allChildren = await Transaction.find({ parentTransactionId: { $in: parentIds } })
+      .sort({ amountMinor: -1, _id: 1 })
+      .lean();
+
+    // Group children by parentTransactionId string key
+    const childMap = new Map<string, typeof allChildren>();
+    for (const child of allChildren) {
+      const pid = (child.parentTransactionId as Types.ObjectId).toString();
+      if (!childMap.has(pid)) childMap.set(pid, []);
+      childMap.get(pid)!.push(child);
+    }
+
+    items = parents.map((p) => ({
+      ...p,
+      children: childMap.get((p._id as Types.ObjectId).toString()) ?? [],
+    }));
+  } else {
+    // Child-list mode or empty page: no embedding needed
+    items = parents;
+  }
 
   res.json({ items, total, page, pageSize });
 });

@@ -331,8 +331,20 @@ paths:
           name: sort
           schema:
             type: string
-            enum: [dateDesc, dateAsc, amountDesc, amountAsc]
-            default: dateDesc
+            enum: [bookDateDesc, bookDateAsc, amountDesc, amountAsc]
+            default: bookDateDesc
+        - in: query
+          name: q
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          description: 'Phase 1: searches title and notes of parent transactions only.'
+        - in: query
+          name: parentTransactionId
+          schema:
+            type: string
+          description: 'Pass "null" (or omit) to list top-level parents only (default). Pass an ObjectId to list children of that parent. The autocomplete usecase uses accountId + q + parentTransactionId=null.'
       responses:
         '200':
           description: Transactions
@@ -343,7 +355,7 @@ paths:
                 properties:
                   items:
                     type: array
-                    items: { $ref: '#/components/schemas/Transaction' }
+                    items: { $ref: '#/components/schemas/TransactionWithChildren' }
                   total: { type: integer }
                   page: { type: integer }
                   pageSize: { type: integer }
@@ -890,6 +902,16 @@ components:
         paidByMemberId: { $ref: '#/components/schemas/ObjectId', nullable: true }
         parentTransactionId: { $ref: '#/components/schemas/ObjectId', nullable: true, description: 'Set for child (split) transactions. Max depth 1.' }
         recurrenceId: { $ref: '#/components/schemas/ObjectId', nullable: true }
+    TransactionWithChildren:
+      description: 'Transaction as returned by the list endpoint. Parents include an embedded children array (never null, empty array when no splits). Children are plain Transaction objects (no further nesting).'
+      allOf:
+        - $ref: '#/components/schemas/Transaction'
+        - type: object
+          properties:
+            children:
+              type: array
+              items: { $ref: '#/components/schemas/Transaction' }
+              description: 'Direct child (split) transactions. Always present on parent rows; omitted / empty on child rows.'
     TransactionCreate:
       type: object
       required: [accountId, type, amountMinor, title, isFromSharedAccount]
