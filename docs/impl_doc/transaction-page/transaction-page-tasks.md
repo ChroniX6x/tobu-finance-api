@@ -1,26 +1,34 @@
 # Taskliste – Buchungen (Variante C) inkl. Capture-Dock + Splits + Hybrid Parent
 
-## Phase 0 – Vorbereitung & Contract
+## Phase 0 – Vorbereitung & Contract ✅ ABGESCHLOSSEN
 
-1. **OpenAPI / Backend Contract aktualisieren**
+1. **✅ OpenAPI / Backend Contract aktualisieren** *(Phase 0 abgeschlossen)*
 
-* `Transaction` um Felder erweitern: `title` (required), `parentTransactionId` (optional).
-* Validierungsregeln dokumentieren/implementieren:
+* `Transaction` um Felder erweitert: `title` (required), `notes` (optional), `parentTransactionId` (optional), `type` (required: `income|expense`), `status` (required: `pending|booked`), `bookDate` (bedingt), `month` (immer required), `isFromSharedAccount` (required, default `true`).
+* `amountMinor` immer >= 0; Vorzeichen kommt aus `type` (kein negatives Vorzeichen).
+* `externalName` entfällt im MVP.
+* Validierungsregeln implementiert:
 
-  * Minor Units `amountMinor` int
-  * ISO `date`
-  * XOR `paidByMemberId` / `externalName` wenn `isFromSharedAccount=false`
-  * Split-Constraint: bei Child Create/Patch darf Parent nicht „über-splittet“ werden (assigned darf total nicht überschreiten – abs Vergleich).
-    **Deliverable:** aktualisiertes `openapi.yaml` + serverseitige Validation.
+  * `amountMinor` int >= 0
+  * `bookDate` ISO 8601; Pflicht wenn `status=booked`
+  * `month` Pflicht; serverseitig aus `bookDate` abgeleitet wenn gesetzt, sonst `YYYY-MM` vom Client
+  * `isFromSharedAccount=false` → `paidByMemberId` Pflicht (kein `externalName`)
+  * Child-Create: Parent muss `parentTransactionId=null` sein (max. Tiefe: 1)
+  * Split-Constraint: `sum(children.amountMinor) <= parent.amountMinor` (kein abs())
+  * Child-PATCH blockiert Änderungen an `type`, `isFromSharedAccount`, `paidByMemberId`
+  * Parent-PATCH cascaded `type/status/bookDate` auf alle direkten Children
+    **Deliverable:** ✅ aktualisiertes `openapi.yaml` + serverseitige Validation + Events.
 
-2. **DB / Schema Anpassungen**
+2. **✅ DB / Schema Anpassungen** *(Phase 0 abgeschlossen – Migration `20260224_transactions_phase0`)*
 
-* Mongo/Migrations: Indexe für schnelle Queries:
+* Mongo-Indexe erstellt:
 
-  * `{ accountId: 1, date: -1 }`
+  * `{ accountId: 1, bookDate: -1 }` (ersetzt alten `date`-Index)
   * `{ accountId: 1, parentTransactionId: 1 }`
-  * optional Textindex `title/notes/externalName` (oder separate Search-Lösung)
-    **Deliverable:** Migration/Index-Skript.
+  * `{ parentTransactionId: 1 }`
+* Felder migriert: `title` (backfill), `notes`, `parentTransactionId`, `isFromSharedAccount`, `month` re-derived.
+* Events-Validator auf `EVENT_CODES_V2` aktualisiert (inkl. `splitChildCreated`, `splitChildDeleted`).
+    **Deliverable:** ✅ Migration `20260224_transactions_phase0.ts` (up+down getestet).
 
 ---
 
@@ -30,11 +38,12 @@
 
 * `TransactionsApiService`:
 
-  * `getTransactions(filters)`
+  * `getTransactions(filters)` — Phase-1-Filter: `accountId` (required), `monthFrom/monthTo`, `status`, `page/pageSize`, `sort`, `q` (optional), `parentTransactionId` (optional, `"null"` für Autocomplete). Response: `{ items: TransactionWithChildren[], total, page, pageSize }` — jeder Parent enthält `children: Transaction[]` (leer wenn keine vorhanden).
+  * Autocomplete-Pattern: `getTransactions({ accountId, parentTransactionId: "null", q })` — FE berechnet `rest = item.amountMinor − sum(item.children.map(c => c.amountMinor))` aus dem Response.
   * `createTransaction(dto)`
   * `patchTransaction(id, patch)`
   * `deleteTransaction(id)`
-  * optional `bulkCreate(dtos)` (wenn du direkt mit Batch starten willst)
+  * ~~`bulkCreate(dtos)`~~ — entfällt im MVP; „Alle speichern" läuft als sequenzielle POSTs
     **Deliverable:** Service + Types.
 
 4. **NGXS: TransactionsState Grundgerüst**
@@ -61,7 +70,8 @@
     * Child: amountMinor
     * Parent ohne Children: amountMinor
     * Parent mit Children: restMinor (0 => Container)
-* UI-State: `expandedParents: Set<string>`
+  * `signedAmountMinor(txId)`: Pure Selector; `type=expense ? -effectiveAmountMinor : +effectiveAmountMinor`; Charts und Aggregationen konsumieren **ausschließlich diesen Selector**
+* UI-State: `expandedParents: Set<string>` (bleibt in TransactionsState — gleiche Lifetime wie die Liste)
 
   * Action `ToggleParentExpanded(parentId)`
     **Deliverable:** Selector-Set + Unit Tests für Rechenlogik (wichtig!).
@@ -69,6 +79,7 @@
 6. **NGXS: DraftsState (Capture/Queue)**
 
 * Model: `dockOpen`, `captureMode (normal|split)`, `drafts[]`, `selectedDraftId`.
+* Draft-Status (kanonisch camelCase): `draft | needsReview | ready | saving | error`
 * Actions:
 
   * `ToggleDock`
@@ -79,9 +90,19 @@
   * `FinalizeDraft`
   * `FinalizeAllReadyDrafts`
   * `RetryFailedDrafts`
-* Finalize:
+* Finalize-Regel:
 
-  * optional Bulk (empfohlen) oder sequential POST
+  * Nur `ready`-Drafts; sequenzielle POSTs (kein Bulk-Endpoint im MVP)
+  * Finalize erzeugt Transaction mit `status=booked`
+  * `needsReview`-Drafts bleiben, `saving` während POST, `error` bei Fehler
+* Draft-Readiness-Check (FE = booked-Validation BE):
+
+  * `amountMinor` int >= 0 + `type` gesetzt
+  * `title` gesetzt (2..80)
+  * `isFromSharedAccount` gesetzt
+  * wenn `isFromSharedAccount=false` → `paidByMemberId` gesetzt
+  * `bookDate` gesetzt (default: heute)
+  * `accountId` gesetzt
     **Deliverable:** DraftsState + Actions + selectors.
 
 ---
@@ -127,17 +148,18 @@
 
 * Reactive Form:
 
-  * amount (inputNumber)
-  * date (calendar)
-  * category dropdown
-  * source dropdown/segmented
-  * paidBy (member/external, XOR)
-  * **title** (required)
+  * amount (inputNumber, immer >= 0)
+  * type dropdown (`income | expense`)
+  * date/bookDate (calendar; Pflicht für `booked`)
+  * category dropdown (optional)
+  * source dropdown/segmented (`isFromSharedAccount`)
+  * paidBy member dropdown — nur anzeigen wenn `isFromSharedAccount=false` (kein `externalName`)
+  * **title** (required, 2..80)
   * notes optional
 * Modus:
 
   * Parent selected → zeigt Split Panel (Total/Assigned/Rest + Children Quick Add)
-  * Child selected → zeigt „Teil von“ Info + Jump-to-parent
+  * Child selected → zeigt „Teil von" Info + Jump-to-parent; Felder `type`, `source`, `paidBy`, `bookDate` read-only (vom Parent geerbt)
     **Deliverable:** Edit & Save (optimistic) funktioniert.
 
 ---
@@ -153,8 +175,9 @@
 
 12. **Quick Add – Normal**
 
-* Pflicht: amount, category, title, source
+* Pflicht: amount, type (Toggle `Ausgabe | Einnahme`), title, source
 * paidBy Pflicht nur wenn source=Privat
+* category: nie Pflichtfeld; null = „Nicht kategorisiert"
 * Buttons:
 
   * „In Queue“
@@ -171,20 +194,22 @@
 * Nach Parent Auswahl:
 
   * zeigt `Rest verfügbar`
-  * erbt date/source/paidBy (optional locked)
-  * validiert Betrag gegen Rest (abs)
+  * child erbt vom Parent (serverseitig): `type`, `isFromSharedAccount`, `paidByMemberId`, `status`, `bookDate`, `month`
+  * UI-Felder `Quelle`, `Bezahlt von`, `Datum` als read-only (Wert aus Parent) anzeigen
+  * validiert Betrag gegen Rest: `assigned <= total` (kein abs())
 * Draft bekommt `parentTransactionId`
   **Deliverable:** Split-QuickAdd + Rest-Validation.
 
 14. **Queue/Drafts**
 
-* Anzeige READY / REVIEW / ERROR
+* Anzeige nach Draft-Status: `draft` / `needsReview` / `ready` / `saving` / `error`
+* UI-Labels lokalisierbar (z.B. „Bereit" / „Prüfen" / „Fehler"), kanonische State-Werte bleiben camelCase
 * Remove + Undo
 * Click Draft → lädt in Detail-Editor (Review Mode optional)
 * `FinalizeAllReadyDrafts`:
 
-  * Bulk oder sequenziell
-  * partial failures bleiben stehen, mit Retry
+  * sequenzielle POSTs (kein Bulk-Endpoint im MVP)
+  * partial failures bleiben stehen, mit Retry (`error`-Drafts)
     **Deliverable:** Queue-Workflow komplett.
 
 ---
@@ -193,19 +218,23 @@
 
 15. **Undo System (Delete Transaction, Remove Draft)**
 
-* Toast mit „Rückgängig“
+* **Delete Child**: Optimistisch + Undo-Toast
+* **Delete Parent ohne Children**: Optimistisch + Undo-Toast
+* **Delete Parent mit Children**: Confirm-Dialog → non-optimistic (kein Undo nötig); Spinner → Erfolgs-/Fehler-Toast
+* **Remove Draft**: Undo-Toast
 * Timeout handling (finalize delete)
   **Deliverable:** Undo robust, keine Dateninkonsistenz.
 
 16. **Hybrid Aggregation in Charts**
 
-* Account Overview Charts auf `effectiveAmountMinor` umstellen:
+* **Selectors zuerst:** Unit Tests für `effectiveAmountMinor`- und `signedAmountMinor`-Selector schreiben (alle 4 Fälle: Parent ohne Children, Parent mit Rest, Container, Child) — **vor** jeder Chart-Änderung.
+* Account Overview Charts auf `signedAmountMinor`-Selector umstellen (Chart-Komponenten selbst werden nicht verändert):
 
-  * Parent ohne splits → full
-  * Parent mit splits → rest
+  * Parent ohne splits → full (signed)
+  * Parent mit splits → rest (signed)
   * Container → 0
-  * Children → own
-    **Deliverable:** Charts korrekt (keine Doppelzählung).
+  * Children → own (signed)
+    **Deliverable:** Charts korrekt (keine Doppelzählung); Selector Unit Tests grün.
 
 17. **Empty States & Onboarding**
 
@@ -245,13 +274,16 @@
 
 # Definition of Done (kurz)
 
-* `title` Pflichtfeld überall (UI+API+DB)
+* ✅ `title` Pflichtfeld überall (UI+API+DB)
+* ✅ `amountMinor` immer >= 0; `type` steuert Vorzeichen (`signedAmountMinor` für Charts)
+* ✅ `bookDate` + `month` korrekt; `month` immer gesetzt; cascaded auf Children
+* ✅ Split-Constraint ohne abs() (alle Beträge >= 0)
+* ✅ Max. Tiefe: 1 (Children haben keine Children)
+* ✅ Cascade: Parent type/status/bookDate wirkt auf alle direkten Children
 * Expandable Liste mit Split-Infos (Total/Assigned/Rest/Container)
-* Hybrid Parent Aggregation korrekt (Charts & Stats)
-* Capture Dock Normal/Teil + Queue + Save all
+* Hybrid Parent Aggregation korrekt: `signedAmountMinor = type=expense ? -effectiveAmountMinor : +effectiveAmountMinor`; Child voll, Parent nur Rest, Container=0
+* Capture Dock Normal/Teil + Queue + Alle speichern (sequenzielle POSTs)
+* Draft-Status `draft|needsReview|ready|saving|error` (FE-only, nicht persistiert)
 * Optimistic Updates + Undo
 * Mobile tauglich
 
----
-
-Wenn du willst, kann ich dir als Nächstes diese Taskliste **als GitHub-Issue-Set** formatieren (mit Labels, Akzeptanzkriterien pro Task) oder als **Markdown-Datei**, die du direkt ins Repo legen kannst.
