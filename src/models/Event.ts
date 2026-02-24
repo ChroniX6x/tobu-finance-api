@@ -14,4 +14,7 @@ const EventSchema = new Schema(
 EventSchema.index({ accountId: 1, date: -1 });
 
 export type EventDoc = InferSchemaType<typeof EventSchema>;
-export default mongoose.models.Event || model("Event", EventSchema);
+
+// Cast guards against OverwriteModelError in hot-reload while keeping correct types.
+const EventModel = (mongoose.models["Event"] as ReturnType<typeof model<EventDoc>>) ?? model<EventDoc>("Event", EventSchema);
+export default EventModel;

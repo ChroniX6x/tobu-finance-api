@@ -305,6 +305,7 @@ paths:
       parameters:
         - in: query
           name: accountId
+          required: true
           schema: { $ref: '#/components/schemas/ObjectId' }
         - in: query
           name: month
@@ -320,14 +321,32 @@ paths:
           schema:
             type: string
             enum: [booked, pending]
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [dateDesc, dateAsc, amountDesc, amountAsc]
+            default: dateDesc
       responses:
         '200':
           description: Transactions
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/Transaction' }
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Transaction' }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
     post:
       summary: Create transaction
       requestBody:
@@ -860,32 +879,57 @@ components:
         _id: { $ref: '#/components/schemas/ObjectId' }
         accountId: { $ref: '#/components/schemas/ObjectId' }
         categoryId: { $ref: '#/components/schemas/ObjectId', nullable: true }
-        title: { type: string, nullable: true }
+        title: { type: string, minLength: 2, maxLength: 80 }
+        notes: { type: string, maxLength: 1000, nullable: true }
         type: { type: string, enum: [income, expense] }
         amountMinor: { type: integer, minimum: 0 }
-        month: { type: string, format: date-time, nullable: true }
-        bookDate: { type: string, format: date-time, nullable: true }
+        month: { type: string, format: date-time, description: 'Derived month anchor (YYYY-MM-01T00:00:00.000Z). Required, never null.' }
+        bookDate: { type: string, format: date-time, nullable: true, description: 'Required when status=booked.' }
         status: { type: string, enum: [booked, pending], default: pending }
-        isFromSharedAccount: { type: boolean, nullable: true }
+        isFromSharedAccount: { type: boolean, description: 'Required. true=shared account, false=private (paidByMemberId required).' }
         paidByMemberId: { $ref: '#/components/schemas/ObjectId', nullable: true }
+        parentTransactionId: { $ref: '#/components/schemas/ObjectId', nullable: true, description: 'Set for child (split) transactions. Max depth 1.' }
         recurrenceId: { $ref: '#/components/schemas/ObjectId', nullable: true }
     TransactionCreate:
       type: object
-      required: [accountId, type, amountMinor]
+      required: [accountId, type, amountMinor, title, isFromSharedAccount]
+      description: |
+        Either bookDate or month must be provided.
+        If status=booked, bookDate is required.
+        If isFromSharedAccount=false, paidByMemberId is required.
+        If parentTransactionId is set (child): type/isFromSharedAccount/paidByMemberId/status/bookDate/month are inherited from parent.
       properties:
         accountId: { $ref: '#/components/schemas/ObjectId' }
         categoryId: { $ref: '#/components/schemas/ObjectId', nullable: true }
-        title: { type: string, nullable: true }
+        title: { type: string, minLength: 2, maxLength: 80 }
+        notes: { type: string, maxLength: 1000, nullable: true }
+        type: { type: string, enum: [income, expense] }
+        amountMinor: { type: integer, minimum: 0 }
+        month: { $ref: '#/components/schemas/Month', description: 'Required when bookDate is absent.' }
+        bookDate: { type: string, format: date-time, nullable: true }
+        status: { type: string, enum: [booked, pending], default: pending }
+        isFromSharedAccount: { type: boolean }
+        paidByMemberId: { $ref: '#/components/schemas/ObjectId', nullable: true }
+        parentTransactionId: { $ref: '#/components/schemas/ObjectId', nullable: true }
+        recurrenceId: { $ref: '#/components/schemas/ObjectId', nullable: true }
+    TransactionUpdate:
+      type: object
+      description: |
+        All fields optional (partial update).
+        Cross-field rules from TransactionCreate still apply to the merged (next) state.
+        Children may not update type, isFromSharedAccount, or paidByMemberId.
+      properties:
+        categoryId: { $ref: '#/components/schemas/ObjectId', nullable: true }
+        title: { type: string, minLength: 2, maxLength: 80 }
+        notes: { type: string, maxLength: 1000, nullable: true }
         type: { type: string, enum: [income, expense] }
         amountMinor: { type: integer, minimum: 0 }
         month: { $ref: '#/components/schemas/Month' }
         bookDate: { type: string, format: date-time, nullable: true }
-        status: { type: string, enum: [booked, pending], default: pending }
-        isFromSharedAccount: { type: boolean, nullable: true }
+        status: { type: string, enum: [booked, pending] }
+        isFromSharedAccount: { type: boolean }
         paidByMemberId: { $ref: '#/components/schemas/ObjectId', nullable: true }
         recurrenceId: { $ref: '#/components/schemas/ObjectId', nullable: true }
-    TransactionUpdate:
-      allOf: [ { $ref: '#/components/schemas/TransactionCreate' } ]
 
     RecurrenceSchedule:
       type: object
