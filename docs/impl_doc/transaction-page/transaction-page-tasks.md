@@ -32,9 +32,9 @@
 
 ---
 
-## Phase 1 – Datenlayer & NGXS
+## Phase 1 – Datenlayer & NGXS ✅ ABGESCHLOSSEN
 
-3. **API Client / Service**
+3. **✅ API Client / Service**
 
 * `TransactionsApiService`:
 
@@ -46,7 +46,7 @@
   * ~~`bulkCreate(dtos)`~~ — entfällt im MVP; „Alle speichern" läuft als sequenzielle POSTs
     **Deliverable:** Service + Types.
 
-4. **NGXS: TransactionsState Grundgerüst**
+4. **✅ NGXS: TransactionsState Grundgerüst**
 
 * State Model: entities, ids, total, filters, loading/error, selectedId.
 * Actions:
@@ -59,7 +59,7 @@
   * `UndoDeleteTransaction`
     **Deliverable:** State + Actions + selectors.
 
-5. **NGXS: Split-Selectors (Hybrid)**
+5. **✅ NGXS: Split-Selectors (Hybrid)**
 
 * Selectors/Computed:
 
@@ -76,7 +76,7 @@
   * Action `ToggleParentExpanded(parentId)`
     **Deliverable:** Selector-Set + Unit Tests für Rechenlogik (wichtig!).
 
-6. **NGXS: DraftsState (Capture/Queue)**
+6. **✅ NGXS: DraftsState (Capture/Queue)**
 
 * Model: `dockOpen`, `captureMode (normal|split)`, `drafts[]`, `selectedDraftId`.
 * Draft-Status (kanonisch camelCase): `draft | needsReview | ready | saving | error`
