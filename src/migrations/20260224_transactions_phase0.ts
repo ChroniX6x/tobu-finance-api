@@ -47,6 +47,63 @@ async function purgeRunBackups(run: any, client: MongoClient, mainDb: Db) {
   await backupDb.collection("_migration_runs").deleteOne({ _id: run._id });
 }
 
+// ─── Event codes ──────────────────────────────────────────────────────────────
+
+// Full list of allowed event codes after this migration (adds split codes).
+const EVENT_CODES_V2 = [
+  "transaction.created",
+  "transaction.booked",
+  "transaction.statusChanged",
+  "transaction.splitChildCreated",
+  "transaction.splitChildDeleted",
+  "contributionRule.added",
+  "contributionRule.updated",
+  "contributionRule.removed",
+  "memberIncome.added",
+  "memberIncome.updated",
+  "memberIncome.removed",
+  "categoryBudget.added",
+  "categoryBudget.updated",
+  "categoryBudget.removed",
+  "account.member.added",
+  "account.member.removed",
+] as const;
+
+// Pre-migration codes (used in down to restore the old validator).
+const EVENT_CODES_V1 = [
+  "transaction.created",
+  "transaction.booked",
+  "transaction.statusChanged",
+  "contributionRule.added",
+  "contributionRule.updated",
+  "contributionRule.removed",
+  "memberIncome.added",
+  "memberIncome.updated",
+  "memberIncome.removed",
+  "categoryBudget.added",
+  "categoryBudget.updated",
+  "categoryBudget.removed",
+  "account.member.added",
+  "account.member.removed",
+] as const;
+
+function buildEventsValidator(codes: readonly string[]) {
+  return {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["accountId", "date", "code", "params"],
+      properties: {
+        accountId: { bsonType: "objectId" },
+        date: { bsonType: "date" },
+        code: { enum: codes as unknown as string[] },
+        params: { bsonType: "object" },
+        createdByMemberId: { bsonType: ["objectId", "null"] },
+      },
+      additionalProperties: true,
+    },
+  };
+}
+
 // ─── Migration UP ─────────────────────────────────────────────────────────────
 //
 // Changes to `transactions` collection:
@@ -61,6 +118,7 @@ async function purgeRunBackups(run: any, client: MongoClient, mainDb: Db) {
 //   8. Create new indexes:
 //        { accountId: 1, parentTransactionId: 1 }
 //        { parentTransactionId: 1 }
+//   9. Update events collection validator to include split event codes.
 
 export const up = async ({ context }: { context: MigrationCtx }) => {
   const { db, client } = context;
@@ -73,6 +131,10 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
     }
 
     await recordValidator(run, client, "transactions", db);
+    // Also record the current events validator so down() can restore it.
+    if (await hasCollection(db, "events")) {
+      await recordValidator(run, client, "events", db);
+    }
     await backupCollection(run, client, db, "transactions");
 
     const NEW = `__new__transactions_${ts}`;
@@ -171,6 +233,16 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
     await db.collection("transactions").createIndex({ accountId: 1, parentTransactionId: 1 });
     await db.collection("transactions").createIndex({ parentTransactionId: 1 });
 
+    // 9) Update events validator to allow split event codes
+    if (await hasCollection(db, "events")) {
+      await db.command({
+        collMod: "events",
+        validator: buildEventsValidator(EVENT_CODES_V2),
+        validationLevel: "strict",
+        validationAction: "error",
+      });
+    }
+
     // Temp cleanup
     const all = await db.listCollections().toArray();
     for (const { name } of all) {
@@ -181,7 +253,7 @@ export const up = async ({ context }: { context: MigrationCtx }) => {
 
     await finalizeRun(run, client, db, "ok");
     console.log(
-      `[${MIG_NAME}] Up finished: title backfill, notes/parentTransactionId/isFromSharedAccount fields added, month re-derived, status fixed, indexes updated.`
+      `[${MIG_NAME}] Up finished: title backfill, notes/parentTransactionId/isFromSharedAccount fields added, month re-derived, status fixed, indexes updated, events validator extended.`
     );
   } catch (err) {
     console.error(`[${MIG_NAME}] Up failed:`, err);
@@ -229,9 +301,19 @@ export const down = async ({ context }: { context: MigrationCtx }) => {
     try { await db.collection("transactions").dropIndex({ accountId: 1, parentTransactionId: 1 } as any); } catch { /* ignore */ }
     try { await db.collection("transactions").dropIndex({ parentTransactionId: 1 } as any); } catch { /* ignore */ }
 
+    // Restore events validator to pre-migration codes
+    if (await hasCollection(db, "events")) {
+      await db.command({
+        collMod: "events",
+        validator: buildEventsValidator(EVENT_CODES_V1),
+        validationLevel: "strict",
+        validationAction: "error",
+      });
+    }
+
     await finalizeRun(run, client, db, "rolled_back");
     await purgeRunBackups(run, client, db);
-    console.log(`[${MIG_NAME}] Down: restored transactions and reverted indexes.`);
+    console.log(`[${MIG_NAME}] Down: restored transactions, reverted indexes, reverted events validator.`);
   } catch (err) {
     console.error(`[${MIG_NAME}] Down failed:`, err);
     throw err;
