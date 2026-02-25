@@ -94,7 +94,7 @@ export const PatchTx = z.object({
 
 // ─── Query ────────────────────────────────────────────────────────────────────
 
-export const QueryTx = z.object({
+const QueryTxBase = z.object({
   accountId: ObjId,
   month: Month.optional(),
   monthFrom: Month.optional(),
@@ -109,7 +109,25 @@ export const QueryTx = z.object({
    * Omitting this param is equivalent to passing "null".
    */
   parentTransactionId: z.union([ObjId, z.literal("null")]).optional(),
+  /**
+   * Filter by categoryIds.
+   * Array of ObjectIds or the special marker "__UNCATEGORIZED__" to filter for transactions without a category.
+   * Can be combined: both uncategorized and specific categories can be selected together.
+   */
+  categoryIds: z.array(z.union([ObjId, z.literal("__UNCATEGORIZED__")])).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
   sort: z.enum(["bookDateDesc", "bookDateAsc", "amountDesc", "amountAsc"]).default("bookDateDesc"),
+}).passthrough() // Allow unknown fields (categoryIds[]) to be passed through
+.transform((data: any) => {
+  // Handle query string array syntax: categoryIds[] -> categoryIds
+  // Express parses categoryIds[]=val as { 'categoryIds[]': val }
+  if ('categoryIds[]' in data && !('categoryIds' in data)) {
+    const value = data['categoryIds[]'];
+    data.categoryIds = Array.isArray(value) ? value : [value];
+    delete data['categoryIds[]']; // Clean up the original field
+  }
+  return data;
 });
+
+export const QueryTx = QueryTxBase;

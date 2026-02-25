@@ -31,7 +31,7 @@ async function sumChildren(parentId: Types.ObjectId, excludeId?: Types.ObjectId)
 // ─── GET /api/transactions ────────────────────────────────────────────────────
 
 r.get("/", validateQuery(QueryTx), async (req, res) => {
-  const { accountId, month, monthFrom, monthTo, status, q: search, parentTransactionId: ptxId, page, pageSize, sort } = (req as any).q;
+  const { accountId, month, monthFrom, monthTo, status, q: search, parentTransactionId: ptxId, categoryIds, page, pageSize, sort } = (req as any).q;
 
   // Determine mode: parent-list mode (default) vs. child-list mode (explicit ObjectId)
   const isParentMode = !ptxId || ptxId === "null";
@@ -43,6 +43,34 @@ r.get("/", validateQuery(QueryTx), async (req, res) => {
 
   if (status) filter.status = status;
 
+  // Build $or clauses for category and search filters
+  const orClauses: Array<Record<string, unknown>> = [];
+
+  // Category filter with support for __UNCATEGORIZED__ marker
+  // Ensure categoryIds is always an array (query parsers might return string for single value)
+  const categoryIdsArray = categoryIds 
+    ? (Array.isArray(categoryIds) ? categoryIds : [categoryIds])
+    : [];
+
+  if (categoryIdsArray.length > 0) {
+    const hasUncategorized = categoryIdsArray.includes("__UNCATEGORIZED__");
+    const realCategoryIds = categoryIdsArray
+      .filter((id: string) => id !== "__UNCATEGORIZED__")
+      .map((id: string) => new Types.ObjectId(id));
+
+    if (hasUncategorized && realCategoryIds.length > 0) {
+      // Combine: uncategorized OR specific categories
+      orClauses.push({ categoryId: null });
+      orClauses.push({ categoryId: { $in: realCategoryIds } });
+    } else if (hasUncategorized) {
+      // Only uncategorized
+      filter.categoryId = null;
+    } else if (realCategoryIds.length > 0) {
+      // Only specific categories
+      filter.categoryId = { $in: realCategoryIds };
+    }
+  }
+
   if (month) {
     filter.month = monthFromYYYYMM(month);
   } else if (monthFrom || monthTo) {
@@ -52,11 +80,25 @@ r.get("/", validateQuery(QueryTx), async (req, res) => {
     filter.month = range;
   }
 
+  // Search filter
   if (search) {
-    filter.$or = [
+    const searchOr = [
       { title: { $regex: search, $options: "i" } },
       { notes: { $regex: search, $options: "i" } },
     ];
+    
+    // If we already have category OR clauses, we need to combine with $and
+    if (orClauses.length > 0) {
+      filter.$and = [
+        { $or: orClauses },
+        { $or: searchOr },
+      ];
+    } else {
+      filter.$or = searchOr;
+    }
+  } else if (orClauses.length > 0) {
+    // Only category OR clauses, no search
+    filter.$or = orClauses;
   }
 
   const sortField = sort.startsWith("amount") ? "amountMinor" : "bookDate";
