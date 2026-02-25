@@ -1,0 +1,68 @@
+src/app/
+├── core/                    ← reine Infrastruktur
+│   ├── auth/                ← Guard, Interceptor, Service, AuthStore
+│   ├── http/                ← API_BASE_URL Token, Http-Helfer
+│   └── notfound/
+├── shell/                   ← Application Shell (Layout, Navigation)
+│   ├── layout/
+│   │   ├── app.layout.ts
+│   │   ├── app.topbar.ts
+│   │   └── ...
+│   ├── app.ts
+│   ├── app.html
+│   └── app.routes.ts
+├── shared/                  ← wirklich geteilte Modelle, Pipes, UI-Komponenten
+│   ├── models/
+│   │   ├── account.model.ts     ← cross-feature (accounts + transactions kennen AccountId)
+│   │   ├── category.model.ts    ← cross-feature (transactions + wizard)
+│   │   └── member.model.ts      ← cross-feature
+│   ├── pipes/
+│   │   └── ng-as.pipe.ts
+│   └── state/               ← nur States die wirklich mehrere Features teilen
+│       ├── categories.state.ts
+│       └── categories.actions.ts
+├── accounts/                ← Feature: alle Account-bezogenen Seiten
+│   ├── index.ts             ← public barrel (optional, NX-Stil)
+│   ├── accounts.routes.ts
+│   ├── components/
+│   │   ├── accounts-list/   ← war accounts.ts + accounts.html
+│   │   └── account-overview/
+│   ├── domain/
+│   │   ├── account.api.service.ts
+│   │   ├── accounts-summary.service.ts
+│   │   └── dashboard-account.model.ts
+│   └── state/
+│       ├── account.state.ts
+│       ├── account.actions.ts
+│       ├── accounts-summary.state.ts
+│       ├── accounts-summary.actions.ts
+│       ├── account-overview.state.ts
+│       └── account-overview.actions.ts
+├── transactions/            ← Feature: Transaction-Page + Capture-Dock
+│   ├── transactions.routes.ts
+│   ├── components/
+│   │   ├── transaction-list/
+│   │   └── capture-dock/
+│   ├── domain/
+│   │   ├── transaction.model.ts
+│   │   └── transactions-api.service.ts
+│   └── state/
+│       ├── transaction-page.state.ts
+│       ├── transaction-page.actions.ts
+│       ├── transaction-capture.state.ts
+│       └── transaction-capture.actions.ts
+├── calculation/
+│   ├── calculation.routes.ts
+│   ├── components/
+│   │   └── calculation-table/
+│   ├── domain/
+│   └── state/
+└── wizard/
+    ├── wizard.routes.ts
+    ├── components/
+    │   ├── base-information/
+    │   ├── categories/
+    │   ├── initial-values/
+    │   └── member-information/
+    ├── domain/
+    └── state/

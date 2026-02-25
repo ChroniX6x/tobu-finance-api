@@ -15,6 +15,8 @@
     "build": "tsc -p .",
     "start": "set NODE_ENV=production&& node dist/src/server.js",
     "seed": "tsx scripts/seed.ts",
+    "seed:transactions": "tsx scripts/seed-transactions.ts",
+    "reset:dev": "npm run seed && npm run migrate && npm run seed:transactions",
     "link-test-users": "tsx scripts/link-users-to-members.ts",
     "mongod": "mongod --dbpath D:\\mongodb\\db",
     "revert": "tsx scripts/revertHalfMigration.ts"
