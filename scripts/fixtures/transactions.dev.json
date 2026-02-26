@@ -1,16 +1,16 @@
 [
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────────────────────────────────────────────────────
   // Symbolisches Format:
-  //   "account"   : Account-Name  (wird zur Laufzeit zu ObjectId aufgelÃ¶st)
+  //   "account"   : Account-Name  (wird zur Laufzeit zu ObjectId aufgelöst)
   //   "category"  : Kategorie-Name innerhalb dieses Accounts (oder null)
-  //   "member"    : Member-Name fÃ¼r paidByMemberId (oder null)
-  //   "parentRef" : localId einer anderen Zeile â†’ parentTransactionId
-  //   "localId"   : optionaler stabiler Bezeichner fÃ¼r parentRef-Verweise
-  //   "month"     : "YYYY-MM" â†’ wird zu Date(YYYY-MM-01)
+  //   "member"    : Member-Name für paidByMemberId (oder null)
+  //   "parentRef" : localId einer anderen Zeile → parentTransactionId
+  //   "localId"   : optionaler stabiler Bezeichner für parentRef-Verweise
+  //   "month"     : "YYYY-MM" → wird zu Date(YYYY-MM-01)
   //   "bookDate"  : "YYYY-MM-DD" oder null
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // â”€â”€ Gemeinschaftskonto / 2025-01 (booked) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Gemeinschaftskonto / 2025-01 (booked) ────────────────────────────────
 
   {
     "localId": "jan25-rewe",
@@ -74,7 +74,7 @@
     "member": "Caro"
   },
 
-  // â”€â”€ Gemeinschaftskonto / 2025-02 (pending) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Gemeinschaftskonto / 2025-02 (pending) ───────────────────────────────
 
   {
     "localId": "feb25-biomarkt",
@@ -126,7 +126,7 @@
     "member": "Caro"
   },
 
-  // â”€â”€ Gemeinschaftskonto / 2025-03 (pending) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Gemeinschaftskonto / 2025-03 (pending) ───────────────────────────────
 
   {
     "localId": "mar25-kino",
@@ -166,7 +166,7 @@
     "isFromSharedAccount": true
   },
 
-  // â”€â”€ Gemeinschaftskonto / 2025-07 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Gemeinschaftskonto / 2025-07 ─────────────────────────────────────────
 
   {
     "localId": "jul25-topup",
@@ -180,10 +180,10 @@
     "isFromSharedAccount": true
   },
 
-  // â”€â”€ NEUE TEST-DATEN: Split-Transactions (Jan 2026, booked) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── NEUE TEST-DATEN: Split-Transactions (Jan 2026, booked) ────────────────
   //
   // Variante A: Container-only (Rest = 0)
-  //   Saturn Einkauf 349,99â‚¬ â†’ 3 Children die exakt aufgehen
+  //   Saturn Einkauf 349,99€ → 3 Children die exakt aufgehen
 
   {
     "localId": "jan26-saturn",
@@ -200,7 +200,7 @@
     "localId": "jan26-saturn-c1",
     "account": "Gemeinschaftskonto",
     "category": "Freizeit",
-    "title": "KopfhÃ¶rer Sony WH-1000",
+    "title": "Kopfhörer Sony WH-1000",
     "type": "expense",
     "amountMinor": 14999,
     "month": "2026-01",
@@ -236,13 +236,13 @@
   },
 
   // Variante B: Hybrid-Parent (Rest > 0)
-  //   REWE GroÃŸeinkauf 150â‚¬ â†’ 1 Child 42â‚¬ â†’ Rest 108â‚¬ verbleibt als Lebensmittel
+  //   REWE Großeinkauf 150€ → 1 Child 42€ → Rest 108€ verbleibt als Lebensmittel
 
   {
     "localId": "jan26-rewe-gross",
     "account": "Gemeinschaftskonto",
     "category": "Lebensmittel",
-    "title": "REWE GroÃŸeinkauf",
+    "title": "REWE Großeinkauf",
     "type": "expense",
     "amountMinor": 15000,
     "month": "2026-01",
@@ -303,10 +303,10 @@
     "member": "Caro"
   },
 
-  // â”€â”€ NEUE TEST-DATEN: Split pending (Feb 2026) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── NEUE TEST-DATEN: Split pending (Feb 2026) ─────────────────────────────
   //
   // Variante C: Pending Split mit Children
-  //   Ikea 249â‚¬ â†’ 2 Children â†’ Rest 174,11â‚¬ als Hybrid-Parent
+  //   Ikea 249€ → 2 Children → Rest 174,11€ als Hybrid-Parent
 
   {
     "localId": "feb26-ikea",
@@ -336,7 +336,7 @@
     "localId": "feb26-ikea-c2",
     "account": "Gemeinschaftskonto",
     "category": "Lebensmittel",
-    "title": "KÃ¼chenutensilien",
+    "title": "Küchenutensilien",
     "type": "expense",
     "amountMinor": 5490,
     "month": "2026-02",
