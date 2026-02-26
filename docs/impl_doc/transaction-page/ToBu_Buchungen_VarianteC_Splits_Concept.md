@@ -1,5 +1,5 @@
 # ToBu Finance – Buchungen & Capture-Konzept (Variante C)
-**Stand:** 2026-02-24 (inkl. finaler Backend-Contract-Entscheidungen)  
+**Stand:** 2026-02-26 (inkl. finaler Backend-Contract-Entscheidungen + FE-Ist-Stand-Abgleich)  
 **Ziel:** Agent‑ready Spezifikation für eine Umsetzung mit **Angular 20+**, **PrimeNG**, **NGXS**, **Signals**, **NodeJS**, **MongoDB**.
 
 > Mockup (Desktop): `mockup_varianteC_splits_expandable.png` (liegt im selben Ordner wie diese Datei)
@@ -18,6 +18,15 @@
 - **`amountMinor` immer ≥ 0**, Vorzeichen kommt aus `type` (`income` / `expense`).
 - **`externalName` entfällt** (MVP). „Bezahlt von" = nur `paidByMemberId` (Pflicht bei Privat).
 - **Zwei getrennte Status-Systeme:** Backend (`pending|booked`) vs. Frontend-Draft (`draft|needsReview|ready|saving|error`).
+
+**Präzisierung Ist-Stand (Frontend, 2026-02-26):**
+- Toolbar, Liste (inkl. Parent/Child rowExpansion) und Detail-Editor sind umgesetzt.
+- Capture-Dock ist als einklappbarer Container vorhanden, Quick-Add/Queue-UI ist noch nicht final implementiert.
+
+**Konzeptrelevante Präzisierungen aus der Umsetzung (ohne reine Bug-Themen):**
+- **ID-Konvention:** Für Transactions und Categories ist die kanonische Kennung im System `'_id'` (MongoDB), nicht `'id'`.
+- **Kategorie-Filter:** „Nicht kategorisiert" ist ein expliziter Filterfall und bleibt konzeptionell als eigene Option erhalten.
+- **API-Filtervertrag Kategorien:** Multi-Value wird als `categoryIds[]` übertragen; „Nicht kategorisiert" wird über den Marker `__UNCATEGORIZED__` repräsentiert.
 
 ---
 
@@ -196,9 +205,15 @@ Bei PATCH eines Parents cascaded der Server automatisch:
 - Kein `externalName` (entfällt im MVP).
 - Zeitraum: `p-calendar` range.
 - Kategorie: `p-multiSelect`.
+- Kategorie enthält zusätzlich die Option **„Nicht kategorisiert"**.
 - Quelle: `p-dropdown` (All/Shared/Privat).
 - Bezahlt von: `p-dropdown` (All + Members). Kein „Extern"-Eintrag; `externalName` entfällt im MVP.
 - Aktive Filter als Chips (entfernbar) + Reset.
+
+**Ist-Stand FE (präzise):**
+- UI-Elemente für `q`, Zeitraum, Kategorien, Quelle und Bezahlt-von sind vorhanden.
+- Im aktuellen FE-Request werden sicher gesendet: `accountId`, `monthFrom`, `monthTo`, `categoryIds[]`, `status`, `page`, `pageSize`, `sort`.
+- `q`, `source`, `paidBy` sind im UI vorhanden, aber noch nicht durchgängig als API-Query verdrahtet.
 
 ### 5.3 Liste: Parent/Child inline (rowExpansion)
 - `p-table` zeigt Parents als Zeilen.
@@ -218,6 +233,13 @@ Bei PATCH eines Parents cascaded der Server automatisch:
 - Parent: `Aufteilen / +Teil`, Edit, Delete
 - Child: Edit, Delete
 
+**Ist-Stand FE (präzise):**
+- Parent-Action `Aufteilen/+Teil` legt bereits einen Split-Draft an (`captureMode='split'`) und öffnet das Dock.
+- Delete ist umgesetzt mit zwei Pfaden:
+  - Parent ohne Children / Child: optimistisch + Undo
+  - Parent mit Children: Confirm + API-Delete + anschließendes State-Cleanup
+- `expandedParents` ist im State vorhanden, die Tabellen-Expansion wird aktuell primär über das Table-Expansion-Verhalten geführt.
+
 ### 5.4 Detail‑Editor (rechts)
 Felder:
 - Betrag, Datum, Kategorie (Rest‑Anteil), Quelle, Bezahlt von (bedingt), `title` (Pflicht), `notes` (optional)
@@ -226,6 +248,11 @@ Zusatz:
 - Parent mit Children: Split‑Panel (Total/Assigned/Rest) + Children Liste + `+ Teil hinzufügen`
 - Child: Info „Teil von: <Parent>“ + Jump‑to‑Parent
 
+**Ist-Stand FE (präzise):**
+- Form ist als Reactive Form umgesetzt und speichert per `PatchTransactionOptimistic`.
+- Child-ReadOnly für geerbte Felder (`type`, `isFromSharedAccount`, `paidByMemberId`, `bookDate`) ist umgesetzt.
+- Status-Feld (`pending/booked`) ist im Editor aktuell editierbar.
+
 ---
 
 ## 6. Capture‑Dock (Batch optional, schnell)
@@ -233,6 +260,10 @@ Zusatz:
 ### 6.1 Verhalten
 - Default: zugeklappt (Tab „Capture (n)“).
 - Öffnen: Fokus in Betrag, Keyboard‑Flow: Tab/Enter/Shift+Enter.
+
+**Ist-Stand FE (präzise):**
+- Dock-Toggle, Draft-Counter und Mode-Toggle (`Normal | Teil`) sind umgesetzt.
+- Quick-Add (Normal/Teil), Queue-Liste, Status-Badges, „Alle speichern", „Fehler erneut" und „Entfernen rückgängig" sind im Dock umgesetzt.
 
 ### 6.2 Quick Add – Pflichtfelder & Defaults
 Pflicht:
@@ -259,12 +290,20 @@ Keyboard:
 - `Ctrl+S` → Alle speichern
 - `Esc` → Clear
 
+**Ist-Stand FE (präzise):**
+- Shortcuts sind im geöffneten Dock umgesetzt.
+- `Enter`/`Shift+Enter`/`Esc` greifen bei Fokus innerhalb des Docks; `Ctrl+S` triggert „Alle speichern" solange das Dock geöffnet ist.
+
 ### 6.3 Split Quick Add (Teilbuchung)
 - Modus Toggle: `Normal | Teil`
-- Teil‑Modus zeigt: **Teil von** (`p-autoComplete`, sucht server-seitig via `GET /api/transactions?accountId=x&parentTransactionId=null&q=<input>`; debounced; schlanke Projektion `{ id, title, amountMinor, rest }` in der Response genügt; unabhängig von der Listenpaginierung)
+- Teil‑Modus zeigt: **Teil von** (`p-autoComplete`, sucht server-seitig via `GET /api/transactions?accountId=x&parentTransactionId=null&q=<input>`; debounced; schlanke Projektion `{ _id, title, amountMinor, rest }` in der Response genügt; unabhängig von der Listenpaginierung)
 - Zeigt Rest verfügbar; Betrag validiert gegen Rest (`assigned <= total`, kein `abs()`)
 - Child erbt vom Parent (serverseitig gesetzt; UI zeigt als „geerbt/gesperrt" an): `type`, `isFromSharedAccount`, `paidByMemberId`, `status`, `bookDate`, `month`
 - UI-Felder `Quelle`, `Bezahlt von` und `Datum` sind bei Child-Drafts read-only (Wert aus Parent anzeigen)
+
+**Ist-Stand FE (präzise):**
+- Parent-Autocomplete ist verdrahtet (`q` + `parentTransactionId=null`), Rest wird aus embedded Children berechnet.
+- Betrag wird gegen Rest validiert; bei Split sind `Typ`, `Quelle`, `Bezahlt von`, `Datum` im Quick-Add gesperrt und werden aus dem Parent übernommen.
 
 ### 6.4 Queue / Drafts
 - Draft-Status (kanonisch camelCase): `draft` | `needsReview` | `ready` | `saving` | `error`
@@ -272,6 +311,10 @@ Keyboard:
 - Remove Draft + Undo
 - **Alle speichern** speichert nur `ready`-Drafts sequenziell (POST je Draft); `needsReview` bleibt; `error` → Retry
 - UI-Labels dürfen lokalisiert sein (z. B. „Bereit" / „Prüfen" / „Fehler"), kanonische State-Werte bleiben englisch camelCase
+
+**Ist-Stand FE (präzise):**
+- Queue zeigt alle Drafts mit lokalisierten Status-Labels und Aktionen (Einzelspeichern bei `ready`, Entfernen, Retry, Save-All).
+- „Click Draft → Editor rechts" ist weiterhin optional; aktuell wird primär die Draft-Selektion im Capture-State gesetzt.
 
 ### 6.5 Import Hooks (MVP)
 - Buttons: OCR / PDF / Paste → erzeugen Drafts (Stub)
@@ -310,6 +353,11 @@ Keyboard:
 - **DraftsState:** dockOpen + drafts + selectedDraftId + captureMode
 - **kein UiPrefsState:** Letzte-Wahl-Defaults (`lastCategoryId`, `lastSource`, `lastPaidByMode`) werden per `UiPrefsService` in `localStorage` persistiert (Key-Schema: `tobu.prefs.{accountId}.*`). Kein NGXS-Overhead für reine UI-Preferences.
 
+**Ist-Stand FE (Namensmapping):**
+- `TransactionsState` entspricht aktuell `TransactionPageState`.
+- `DraftsState` entspricht aktuell `TransactionCaptureState`.
+- `UiPrefsService`-Persistenz ist konzeptionell vorgesehen, aktuell noch nicht als eigener produktiver Flow umgesetzt.
+
 ### 8.2 Actions (Minimalset)
 - Load: `LoadTransactions(filters)`, `SetPage`, `SetSort`
 - UI: `SelectTransaction(id)`, `ToggleParentExpanded(parentId)`, `ToggleDock(open?)`, `SetCaptureMode(mode)`
@@ -346,10 +394,15 @@ Keyboard:
 | `accountId` | `abc123` | **Pflicht** |
 | `monthFrom` | `2026-01` | Format `YYYY-MM`; filtert `month >=` |
 | `monthTo` | `2026-03` | Format `YYYY-MM`; filtert `month <=` |
+| `categoryIds[]` | `categoryIds[]=<id>&categoryIds[]=<id2>` | Mehrfachfilter Kategorie (Array-Notation). Enthält optional `__UNCATEGORIZED__` für „Nicht kategorisiert". |
 | `status` | `pending` | Einzelwert: `pending\|booked` |
 | `page` | `1` | 1-basiert |
 | `pageSize` | `50` | max. 200 |
 | `sort` | `bookDateDesc` | `bookDateDesc\|bookDateAsc\|amountDesc\|amountAsc` |
+
+**Ist-Stand FE-Client (präzise):**
+- `TransactionsApiService.getTransactions(...)` sendet derzeit: `accountId`, `monthFrom`, `monthTo`, `categoryIds[]`, `status`, `page`, `pageSize`, `sort`.
+- `q` und `parentTransactionId` sind konzeptionell als Phase-1-Filter definiert, aber im aktuellen FE-Service noch nicht vollständig verdrahtet.
 
 Antwort: `{ items: Transaction[], total: number, page: number, pageSize: number }`
 
@@ -364,6 +417,11 @@ Antwort: `{ items: Transaction[], total: number, page: number, pageSize: number 
 | `q` | `Edeka` | Suche in `title` + `notes` (Parents); min. 1, max. 200 Zeichen |
 
 > **Autocomplete-Pattern:** `GET /api/transactions?accountId=x&parentTransactionId=null&q=<input>` — liefert `TransactionWithChildren`-Objekte. Das FE berechnet `rest = amountMinor − sum(children.map(c => c.amountMinor))` direkt aus den embedded Children und zeigt es als „Rest verfügbar" an. Kein separater `rest`-Feld im Response nötig.
+
+> **Sonderfall „Nicht kategorisiert" im API-Filter:**
+> - `categoryIds[]=__UNCATEGORIZED__` → nur Transactions mit `categoryId = null`
+> - gemischt (`categoryIds[]=__UNCATEGORIZED__` + echte Category-IDs) → Union aus `categoryId = null` **oder** den angegebenen Kategorien
+> - nur echte Category-IDs → normales Kategorie-`IN`-Filtering
 
 **Phase 2 (geplant, noch nicht implementiert):**
 | Param | Notiz |
@@ -394,10 +452,10 @@ Antwort: `{ items: Transaction[], total: number, page: number, pageSize: number 
 - Split constraint ohne `abs()` (alle Beträge ≥ 0). ✅ BE fertig.
 - Max. Split-Tiefe: 1 (Children können keine Children haben). ✅ BE fertig.
 - Cascade: Parent type/status/bookDate wirkt auf alle direkten Children. ✅ BE fertig.
-- GET `/api/transactions` liefert Parents mit embedded `children: Transaction[]`; `q` + `parentTransactionId` als Phase-1-Filter. ✅ BE fertig.
+- GET `/api/transactions` liefert Parents mit embedded `children: Transaction[]`; `q` + `parentTransactionId` als Phase-1-Filter. ✅ BE fertig, FE-Query-Verdrahtung für `q`/`parentTransactionId` noch offen.
 - Expandable Liste mit Split‑Info (Total/Assigned/Rest/Container).
 - Hybrid Aggregation: Child immer voll, Parent nur Rest (signed via `signedAmountMinor`), Container=0.
-- Capture Dock Normal/Teil + Queue + Alle speichern (sequenziell POST).
+- Capture Dock Normal/Teil + Queue + Alle speichern (sequenziell POST) — State/Actions vorhanden, UI noch nicht end-to-end fertig.
 - Draft-Status `draft|needsReview|ready|saving|error` (FE-only, nicht persistiert).
 - Optimistic + Undo.
 - Mobile nutzbar.

@@ -32,9 +32,9 @@
 
 ---
 
-## Phase 1 – Datenlayer & NGXS ✅ ABGESCHLOSSEN
+## Phase 1 – Datenlayer & NGXS
 
-3. **✅ API Client / Service**
+3. **🟡 API Client / Service** *(weitgehend umgesetzt, FE-Query-Verdrahtung offen)*
 
 * `TransactionsApiService`:
 
@@ -44,7 +44,11 @@
   * `patchTransaction(id, patch)`
   * `deleteTransaction(id)`
   * ~~`bulkCreate(dtos)`~~ — entfällt im MVP; „Alle speichern" läuft als sequenzielle POSTs
-    **Deliverable:** Service + Types.
+  * **Ist-Stand FE:** aktuell sind im Service sicher verdrahtet `accountId`, `monthFrom`, `monthTo`, `categoryIds[]`, `status`, `page`, `pageSize`, `sort`; `q` und `parentTransactionId` sind noch nachzuziehen.
+  * **Soll:** Vollständige Phase-1-Filterverdrahtung (`q`, `parentTransactionId`) im FE-Service.
+  * **Gap:** `q` und `parentTransactionId` werden aktuell nicht als Query-Parameter gesetzt.
+  * **Next Action:** `getTransactions(...)` um `q` und `parentTransactionId` erweitern; anschließend Search-/Split-Autocomplete-Flow gegen API verifizieren.
+    **Deliverable:** Service + Types (+ vollständige Filter-Verdrahtung im FE).
 
 4. **✅ NGXS: TransactionsState Grundgerüst**
 
@@ -59,7 +63,7 @@
   * `UndoDeleteTransaction`
     **Deliverable:** State + Actions + selectors.
 
-5. **✅ NGXS: Split-Selectors (Hybrid)**
+5. **🟡 NGXS: Split-Selectors (Hybrid)** *(Selektoren fertig, Tests offen)*
 
 * Selectors/Computed:
 
@@ -74,9 +78,13 @@
 * UI-State: `expandedParents: Set<string>` (bleibt in TransactionsState — gleiche Lifetime wie die Liste)
 
   * Action `ToggleParentExpanded(parentId)`
-    **Deliverable:** Selector-Set + Unit Tests für Rechenlogik (wichtig!).
+  * **Soll:** Selektor-Logik testbar abgesichert (Parent ohne Children, Parent mit Rest, Container, Child).
+  * **Ist:** Selektoren laufen produktiv, aber ohne dedizierte Unit-Tests.
+  * **Gap:** Fehlende Regression-Absicherung bei Refactoring/Chart-Anbindung.
+  * **Next Action:** Spec-Datei für `effectiveAmountMinor`/`signedAmountMinor` inkl. 4 Kernfälle ergänzen.
+    **Deliverable:** Selector-Set ✅ + Unit Tests für Rechenlogik (offen).
 
-6. **✅ NGXS: DraftsState (Capture/Queue)**
+6. **🟡 NGXS: DraftsState (Capture/Queue)** *(State/Aktionen umgesetzt, UI-Anbindung offen)*
 
 * Model: `dockOpen`, `captureMode (normal|split)`, `drafts[]`, `selectedDraftId`.
 * Draft-Status (kanonisch camelCase): `draft | needsReview | ready | saving | error`
@@ -103,20 +111,24 @@
   * wenn `isFromSharedAccount=false` → `paidByMemberId` gesetzt
   * `bookDate` gesetzt (default: heute)
   * `accountId` gesetzt
-    **Deliverable:** DraftsState + Actions + selectors.
+* **Soll:** State-Flow ist vollständig über Dock-UI nutzbar (Add/Update/Finalize/Retry/Undo).
+* **Ist:** Actions und Logik sind implementiert, aber Capture-Dock nutzt sie noch nicht vollständig im UI.
+* **Gap:** Fehlende End-to-End-Benutzbarkeit der Draft-Pipeline.
+* **Next Action:** Dock-UI (Quick Add + Queue) direkt an `AddDraft`, `UpdateDraft`, `FinalizeAllReadyDrafts`, `RetryFailedDrafts` anbinden.
+    **Deliverable:** DraftsState + Actions + selectors ✅; vollständige Dock-UI-Anbindung offen.
 
 ---
 
 ## Phase 2 – UI Skeleton (Desktop-first, Mobile responsive)
 
-7. **Route + Page Shell**
+7. **✅ Route + Page Shell**
 
 * Route: `/accounts/:accountId/transactions`
 * Component: `TransactionsPageComponent`
 * Layout: Toolbar + Splitter + Capture Dock (collapsed by default)
   **Deliverable:** Navigierbare Seite.
 
-8. **Toolbar / Filter UI**
+8. **🟡 Toolbar / Filter UI** *(UI fertig, Filter-Verdrahtung teilweise offen)*
 
 * PrimeNG:
 
@@ -127,9 +139,13 @@
   * `p-dropdown` Bezahlt von
   * CTA `+ Neue Buchung`
 * Filter-Chips (Custom oder `p-chip`) + Reset
-  **Deliverable:** Filter setzen → `LoadTransactions` (server oder client).
+* **Ist-Stand FE:** `q`, `Quelle`, `Bezahlt von` sind im UI vorhanden; `q/source/paidBy` sind noch nicht vollständig als API-Query angebunden.
+* **Soll:** Alle sichtbaren Filter wirken serverseitig konsistent auf `LoadTransactions`.
+* **Gap:** UI und Request-Parameter sind aktuell nicht 1:1 synchron.
+* **Next Action:** Filter-Mapping im Toolbar-Dispatch + API-Service angleichen und mit Kombinationsfällen testen (`q+Kategorie+Zeitraum+Quelle+paidBy`).
+  **Deliverable:** Filter setzen → `LoadTransactions` + vollständige API-Filterverdrahtung.
 
-9. **Liste: p-table mit rowExpansion**
+9. **✅ Liste: p-table mit rowExpansion**
 
 * Parents in `p-table`
 * RowExpansion Template: Children-Liste (eingezogen)
@@ -143,8 +159,12 @@
   * Parent: „Aufteilen/+Teil“, Edit, Delete
   * Child: Edit, Delete
     **Deliverable:** Expand/Collapse + korrektes Rendering.
+    **Hinweis:** `expandedParents` ist im State vorhanden, derzeit aber nicht als führende Quelle für den Table-Expand-State genutzt.
+    **Soll:** Expand-State ist eindeutig (eine Quelle) und paging-/reload-stabil.
+    **Gap:** Doppeltes Konzept (`expandedParents` im State vs. table-interner Expand-State).
+    **Next Action:** Entscheidung treffen: entweder state-gesteuerte Expansion anbinden oder `expandedParents` aus Scope entfernen.
 
-10. **Detail-Editor (rechts)**
+10. **✅ Detail-Editor (rechts)**
 
 * Reactive Form:
 
@@ -166,14 +186,16 @@
 
 ## Phase 3 – Capture Dock (Quick Add + Split)
 
-11. **Capture Dock UI**
+11. **✅ Capture Dock UI** *(Phase 3 Kern umgesetzt)*
 
 * Collapsible Bottom Panel (desktop) + Bottom-Sheet (mobile)
 * Links Quick Add, rechts Queue, unten „Alle speichern“
 * Mode Toggle: Normal | Teil
-  **Deliverable:** Dock togglen + state persist (optional localStorage).
+* **Ist-Stand FE:** Dock enthält Quick Add, Queue-Liste, Status-Badges und Footer-Aktionen (`Alle speichern`, `Fehler erneut`, `Entfernen rückgängig`).
+* **Shortcuts umgesetzt:** `Enter`, `Shift+Enter`, `Ctrl+S`, `Esc`.
+  **Deliverable:** ✅ Dock togglen + vollständige Quick-Add/Queue-UI.
 
-12. **Quick Add – Normal**
+12. **✅ Quick Add – Normal**
 
 * Pflicht: amount, type (Toggle `Ausgabe | Einnahme`), title, source
 * paidBy Pflicht nur wenn source=Privat
@@ -186,9 +208,11 @@
 
   * Enter → In Queue
   * Shift+Enter → In Queue + Reset + Fokus Betrag
-    **Deliverable:** Schnell erfassen funktioniert.
+* **Ist-Stand FE:** Formular + Validation + Dispatch für `AddDraft` / `FinalizeDraft` sind umgesetzt.
+* **Keyboard:** Enter/Shift+Enter/Ctrl+S/Esc umgesetzt.
+  **Deliverable:** ✅ Schnell erfassen funktioniert.
 
-13. **Quick Add – Teilbuchung**
+13. **✅ Quick Add – Teilbuchung**
 
 * Zusätzlicher Input: `Teil von` (p-autoComplete) → sucht Parents
 * Nach Parent Auswahl:
@@ -198,9 +222,11 @@
   * UI-Felder `Quelle`, `Bezahlt von`, `Datum` als read-only (Wert aus Parent) anzeigen
   * validiert Betrag gegen Rest: `assigned <= total` (kein abs())
 * Draft bekommt `parentTransactionId`
-  **Deliverable:** Split-QuickAdd + Rest-Validation.
+* **Ist-Stand FE:** Parent-Autocomplete (`q` + `parentTransactionId=null`) und Rest-Validierung sind im Dock umgesetzt.
+* **Ist-Stand FE:** Geerbte Felder im Split-Modus werden aus Parent übernommen und im Quick-Add gesperrt.
+  **Deliverable:** ✅ Split-QuickAdd + Rest-Validation.
 
-14. **Queue/Drafts**
+14. **✅ Queue/Drafts**
 
 * Anzeige nach Draft-Status: `draft` / `needsReview` / `ready` / `saving` / `error`
 * UI-Labels lokalisierbar (z.B. „Bereit" / „Prüfen" / „Fehler"), kanonische State-Werte bleiben camelCase
@@ -210,7 +236,9 @@
 
   * sequenzielle POSTs (kein Bulk-Endpoint im MVP)
   * partial failures bleiben stehen, mit Retry (`error`-Drafts)
-    **Deliverable:** Queue-Workflow komplett.
+* **Ist-Stand FE:** Queue-Liste mit Status-Badges und Aktionen für `FinalizeAllReadyDrafts`, Einzel-Finalize, `RetryFailedDrafts`, `RemoveDraft` + Undo ist umgesetzt.
+* **Hinweis:** Review-Mode-Handover „Click Draft → rechter Detail-Editor" bleibt optional und ist nicht Blocker für Phase 3.
+  **Deliverable:** ✅ Queue-Workflow komplett.
 
 ---
 
@@ -234,6 +262,10 @@
   * Parent mit splits → rest (signed)
   * Container → 0
   * Children → own (signed)
+* **Soll:** Charts nutzen ausschließlich den Hybrid-Selector und vermeiden Doppelzählungen robust.
+* **Ist:** Selektoren vorhanden; Chart-Umstellung/Tests noch nicht final dokumentiert.
+* **Gap:** Risiko von inkonsistenter Aggregation außerhalb der Selektor-Pipeline.
+* **Next Action:** Chart-Datenquelle auditen und auf `signedAmountMinor` vereinheitlichen; Tests grünziehen.
     **Deliverable:** Charts korrekt (keine Doppelzählung); Selector Unit Tests grün.
 
 17. **Empty States & Onboarding**
@@ -282,7 +314,7 @@
 * ✅ Cascade: Parent type/status/bookDate wirkt auf alle direkten Children
 * Expandable Liste mit Split-Infos (Total/Assigned/Rest/Container)
 * Hybrid Parent Aggregation korrekt: `signedAmountMinor = type=expense ? -effectiveAmountMinor : +effectiveAmountMinor`; Child voll, Parent nur Rest, Container=0
-* Capture Dock Normal/Teil + Queue + Alle speichern (sequenzielle POSTs)
+* Capture Dock Normal/Teil + Queue + Alle speichern (sequenzielle POSTs) — **teilweise** (State/Aktionen da, UI noch offen)
 * Draft-Status `draft|needsReview|ready|saving|error` (FE-only, nicht persistiert)
 * Optimistic Updates + Undo
 * Mobile tauglich
