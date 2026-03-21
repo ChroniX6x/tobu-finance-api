@@ -126,6 +126,12 @@ Typische Felder:
 
 **Wichtig:**
 Ein User ist **nicht automatisch** ein Haushaltsmitglied.
+Der User ist die technische Identität der App, während `member` die fachliche Person im Haushalt modelliert.
+
+### Auth-Verhalten im aktuellen API-Vertrag
+Die API nutzt standardmäßig Bearer-Auth mit einem kurzlebigen Access Token. Das Access Token wird nach Login oder Registrierung im Response-Body zurückgegeben und bei geschützten Endpunkten als `Authorization: Bearer <token>` mitgeschickt. Die Auth-Endpunkte selbst sind öffentlich und setzen `security: []`.
+
+Die Registrierung ist gleichzeitig ein Auto-Login: `POST /api/auth/register` legt einen User an, liefert direkt ein Access Token zurück und setzt zusätzlich einen HttpOnly-Refresh-Cookie. `POST /api/auth/login` funktioniert analog für bestehende Nutzer und ist explizit rate-limitiert pro IP.
 
 ---
 
@@ -147,6 +153,13 @@ Typische Felder:
 - Session-Verwaltung
 - Token-Rotation
 - Logout / Session-Revoke
+
+### Refresh- und Logout-Logik
+Refresh Tokens werden nicht im normalen Response-Body geführt, sondern als HttpOnly-Cookie `rt`. `POST /api/auth/refresh` liest diesen Cookie, stellt ein neues kurzlebiges Access Token aus und rotiert gleichzeitig die Refresh-Session.
+
+Die API sieht dabei explizit **Refresh-Token-Rotation** vor: Die bisherige Session wird widerrufen und eine neue Session mit neuem Cookie ausgegeben. Wird ein bereits widerrufener Refresh Token erneut verwendet, greift **Reuse Detection** und alle Sessions des Users werden sofort widerrufen.
+
+`POST /api/auth/logout` ist idempotent: Auch ohne vorhandenen Refresh-Cookie antwortet der Endpunkt mit `204`. Wenn ein Cookie vorhanden ist, wird die aktuelle Session widerrufen und der Cookie gelöscht.
 
 ---
 
@@ -589,9 +602,19 @@ Damit bekommt die App ein robustes Hinweissystem statt unstrukturierter Meldunge
 **Zweck:**
 - Nutzer anmelden / registrieren
 - Zugriff auf persönliche Accounts herstellen
+- Sessions sicher erneuern und beenden
 
 **Fachliche Bedeutung:**
 Der Login ist nicht nur Technik, sondern Einstieg in personengebundene Daten.
+
+**Konkreter API-Flow:**
+1. `POST /api/auth/register` erstellt einen neuen User, loggt ihn direkt ein, gibt ein Access Token zurück und setzt einen HttpOnly-Refresh-Cookie.
+2. `POST /api/auth/login` authentifiziert per E-Mail + Passwort, gibt ein Access Token zurück und setzt ebenfalls den Refresh-Cookie.
+3. Läuft das Access Token ab, holt sich der Client über `POST /api/auth/refresh` mit dem Cookie ein neues Access Token.
+4. `POST /api/auth/logout` widerruft die aktuelle Session und entfernt den Refresh-Cookie.
+
+**Wichtige Implementierungsentscheidung:**
+Das Access Token ist kurzlebig und für API-Requests gedacht. Der langlebigere Refresh Token liegt ausschließlich als HttpOnly-Cookie vor und soll nicht im Frontend-State gespeichert werden.
 
 ---
 
@@ -754,6 +777,31 @@ Gedacht für:
 - Editor-/Wizard-nahe Datensammlung
 - abhängige Daten in einem Call
 
+### 7.4 Auth-Endpunkte
+Der Auth-Bereich ist jetzt als eigener API-Block dokumentiert.
+
+**`POST /api/auth/register`**
+- legt einen User an
+- liefert `accessToken` + `user`
+- setzt einen HttpOnly-Refresh-Cookie
+
+**`POST /api/auth/login`**
+- authentifiziert per E-Mail + Passwort
+- liefert `accessToken` + `user`
+- setzt einen HttpOnly-Refresh-Cookie
+- ist rate-limitiert
+
+**`POST /api/auth/refresh`**
+- liest den Refresh-Cookie `rt`
+- liefert ein neues `accessToken`
+- rotiert die Refresh-Session
+- widerruft bei Token-Replay alle Sessions des Users
+
+**`POST /api/auth/logout`**
+- widerruft die aktuelle Session
+- löscht den Refresh-Cookie
+- bleibt idempotent, auch wenn kein Cookie vorhanden ist
+
 ---
 
 ## 8. Frontend-Struktur
@@ -808,9 +856,9 @@ Nur so bleiben Splits korrekt.
 - Recurrence-Templates
 - Wizard-Grundidee
 - Capture-Dock-Konzept
+- Auth-API mit Register, Login, Refresh und Logout
 
 ### Noch nicht vollständig geschlossen
-- vollständiger Auth-Vertrag in der API-Doku
 - dediziertes Read Model für Monatsplanung
 - robuste Typisierung von Mitgliedseinzahlungen
 - Recurrence-Unterstützung für private wiederkehrende Zahlungen
@@ -822,16 +870,7 @@ Nur so bleiben Splits korrekt.
 
 ## 11. Kompakte Gap-Liste
 
-## GAP 1 – Auth-Vertrag unvollständig
-**Problem:** Login/Register/Refresh/Logout sind fachlich gesetzt, aber nicht vollständig als kanonischer API-Vertrag dokumentiert.
-
-**Fehlt:**
-- Auth-Endpunkte
-- Access-Regeln auf Basis des eingeloggten Users
-
----
-
-## GAP 2 – Monatsplanung ohne fertiges Read Model
+## GAP 1 – Monatsplanung ohne fertiges Read Model
 **Problem:** Fachlogik für `monthlyDue vs. paid` ist da, aber keine endgültige serverseitige Sicht.
 
 **Fehlt:**
@@ -840,7 +879,7 @@ Nur so bleiben Splits korrekt.
 
 ---
 
-## GAP 3 – Mitgliedseinzahlungen nicht klar typisiert
+## GAP 2 – Mitgliedseinzahlungen nicht klar typisiert
 **Problem:** Das Modell unterscheidet noch nicht sauber zwischen echter Einzahlung eines Mitglieds, normaler Einnahme, Erstattung oder sonstigem Zufluss.
 
 **Fehlt:**
@@ -848,7 +887,7 @@ Nur so bleiben Splits korrekt.
 
 ---
 
-## GAP 4 – Recurrences für private Zahlungen unvollständig
+## GAP 3 – Recurrences für private Zahlungen unvollständig
 **Problem:** Wiederkehrende private Ausgaben lassen sich nicht vollständig modellieren, solange kein `paidByMemberId` in Recurrences existiert.
 
 **Fehlt:**
@@ -856,7 +895,7 @@ Nur so bleiben Splits korrekt.
 
 ---
 
-## GAP 5 – Insights noch nicht vollständig hart typisiert
+## GAP 4 – Insights noch nicht vollständig hart typisiert
 **Problem:** Insights sind fachlich vorhanden, aber noch nicht überall als stabiler Minimalvertrag festgezogen.
 
 **Fehlt:**
@@ -864,7 +903,7 @@ Nur so bleiben Splits korrekt.
 
 ---
 
-## GAP 6 – No-Snapshot-Fall für neue Accounts offen
+## GAP 5 – No-Snapshot-Fall für neue Accounts offen
 **Problem:** Für Accounts ohne `account_balance` ist der initiale Zustand im Dashboard/Overview noch nicht eindeutig geregelt.
 
 **Fehlt:**
@@ -872,7 +911,7 @@ Nur so bleiben Splits korrekt.
 
 ---
 
-## GAP 7 – Wizard noch nicht atomar
+## GAP 6 – Wizard noch nicht atomar
 **Problem:** Der Wizard erzeugt fachlich viele abhängige Objekte, aber es fehlt ein klarer transaktionaler Gesamt-Create-Flow.
 
 **Fehlt:**
@@ -880,7 +919,7 @@ Nur so bleiben Splits korrekt.
 
 ---
 
-## GAP 8 – Dokumentationskonsistenz noch nicht vollständig
+## GAP 7 – Dokumentationskonsistenz noch nicht vollständig
 **Problem:** Monatsformate, manche Feldnamen und einige Zwischenartefakte sind noch nicht komplett harmonisiert.
 
 **Fehlt:**

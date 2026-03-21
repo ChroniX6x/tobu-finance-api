@@ -11,6 +11,10 @@ info:
 servers:
   - url: http://localhost:4000
     description: Local dev
+
+security:
+  - BearerAuth: []
+
 paths:
   /health:
     get:
@@ -44,6 +48,139 @@ paths:
                     type: array
                     items:
                       type: string
+
+  /api/auth/register:
+    post:
+      summary: Register a new user
+      description: Creates a new user account and returns an access token. Auto-login on success sets an HttpOnly refresh cookie.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthRegisterRequest' }
+      responses:
+        '201':
+          description: User created and logged in
+          headers:
+            Set-Cookie:
+              description: HttpOnly refresh token cookie (`rt`; path=/api/auth/refresh)
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokenResponse' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthValidationError' }
+        '409':
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, example: 'Email already in use' }
+
+  /api/auth/login:
+    post:
+      summary: Login
+      description: |
+        Authenticates the user with email + password and returns a short-lived access token.
+        Sets an HttpOnly refresh token cookie (`rt`) for subsequent token rotation.
+        This endpoint is rate-limited per IP.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthLoginRequest' }
+      responses:
+        '200':
+          description: Logged in successfully
+          headers:
+            Set-Cookie:
+              description: HttpOnly refresh token cookie (`rt`; path=/api/auth/refresh)
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokenResponse' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthValidationError' }
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, example: 'Invalid credentials' }
+        '429':
+          description: Too many login attempts (rate limited)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+
+  /api/auth/refresh:
+    post:
+      summary: Refresh access token
+      description: |
+        Issues a new short-lived access token using the HttpOnly refresh cookie (`rt`).
+        Implements refresh-token rotation: the current session is revoked and a new session + cookie are issued.
+        If a previously revoked token is replayed, **all** sessions for that user are immediately revoked (reuse detection).
+      tags: [Auth]
+      security: []
+      parameters:
+        - in: cookie
+          name: rt
+          required: true
+          schema: { type: string }
+          description: HttpOnly refresh token cookie set by /register or /login
+      responses:
+        '200':
+          description: New access token issued
+          headers:
+            Set-Cookie:
+              description: Rotated HttpOnly refresh token cookie
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthRefreshResponse' }
+        '401':
+          description: Missing, invalid, expired, revoked, or replayed refresh token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+
+  /api/auth/logout:
+    post:
+      summary: Logout
+      description: |
+        Revokes the current session identified by the refresh cookie (`rt`) and clears the cookie.
+        If no cookie is present, the endpoint still responds with 204 (idempotent).
+      tags: [Auth]
+      security: []
+      parameters:
+        - in: cookie
+          name: rt
+          required: false
+          schema: { type: string }
+          description: HttpOnly refresh token cookie. If present, the associated session is revoked.
+      responses:
+        '204':
+          description: Logged out — session revoked and cookie cleared
 
   /api/members:
     get:
@@ -772,6 +909,13 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived RS256 access token. Pass as `Authorization: Bearer <token>`.
+
   parameters:
     IdParam:
       name: id
@@ -798,6 +942,58 @@ components:
       type: string
       pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
       example: "2025-08"
+
+    # --- Auth ---
+    AuthUser:
+      type: object
+      required: [id, email, roles]
+      properties:
+        id: { type: string, description: User ObjectId }
+        email: { type: string, format: email }
+        name: { type: string, nullable: true }
+        roles:
+          type: array
+          items: { type: string }
+          example: [user]
+    AuthRegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        name: { type: string, minLength: 2, maxLength: 64, nullable: true }
+        password: { type: string, format: password, minLength: 8, maxLength: 128 }
+    AuthLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, minLength: 8, maxLength: 128 }
+    AuthTokenResponse:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken: { type: string, description: Short-lived RS256 JWT access token }
+        user: { $ref: '#/components/schemas/AuthUser' }
+    AuthRefreshResponse:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken: { type: string, description: New short-lived RS256 JWT access token }
+    AuthValidationError:
+      type: object
+      description: Zod validation error (flatten output)
+      properties:
+        error:
+          type: object
+          properties:
+            formErrors:
+              type: array
+              items: { type: string }
+            fieldErrors:
+              type: object
+              additionalProperties:
+                type: array
+                items: { type: string }
     Split:
       type: object
       required: [memberId, split]
