@@ -1,0 +1,388 @@
+[
+  // ─────────────────────────────────────────────────────────────────────────
+  // Symbolisches Format:
+  //   "account"   : Account-Name  (wird zur Laufzeit zu ObjectId aufgelöst)
+  //   "category"  : Kategorie-Name innerhalb dieses Accounts (oder null)
+  //   "member"    : Member-Name für paidByMemberId (oder null)
+  //   "parentRef" : localId einer anderen Zeile → parentTransactionId
+  //   "localId"   : optionaler stabiler Bezeichner für parentRef-Verweise
+  //   "month"     : "YYYY-MM" → wird zu Date(YYYY-MM-01)
+  //   "bookDate"  : "YYYY-MM-DD" oder null
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Gemeinschaftskonto / 2025-01 (booked) ────────────────────────────────
+
+  {
+    "localId": "jan25-rewe",
+    "account": "Gemeinschaftskonto",
+    "category": "Lebensmittel",
+    "title": "Wocheneinkauf REWE",
+    "type": "expense",
+    "amountMinor": 8000,
+    "month": "2025-01",
+    "bookDate": "2025-01-01",
+    "status": "booked",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "jan25-miete",
+    "account": "Gemeinschaftskonto",
+    "category": "Miete",
+    "title": "Miete",
+    "type": "expense",
+    "amountMinor": 95000,
+    "month": "2025-01",
+    "bookDate": "2025-01-01",
+    "status": "booked",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "jan25-konzert",
+    "account": "Gemeinschaftskonto",
+    "category": "Freizeit",
+    "title": "Konzerttickets",
+    "type": "expense",
+    "amountMinor": 12000,
+    "month": "2025-01",
+    "bookDate": "2025-01-01",
+    "status": "booked",
+    "isFromSharedAccount": false,
+    "member": "Caro"
+  },
+  {
+    "localId": "jan25-gehalt-tony",
+    "account": "Gemeinschaftskonto",
+    "title": "Gehalt Tony",
+    "type": "income",
+    "amountMinor": 280000,
+    "month": "2025-01",
+    "bookDate": "2025-01-01",
+    "status": "booked",
+    "isFromSharedAccount": true,
+    "member": "Tony"
+  },
+  {
+    "localId": "jan25-gehalt-caro",
+    "account": "Gemeinschaftskonto",
+    "title": "Gehalt Caro",
+    "type": "income",
+    "amountMinor": 200000,
+    "month": "2025-01",
+    "bookDate": "2025-01-01",
+    "status": "booked",
+    "isFromSharedAccount": true,
+    "member": "Caro"
+  },
+
+  // ── Gemeinschaftskonto / 2025-02 (pending) ───────────────────────────────
+
+  {
+    "localId": "feb25-biomarkt",
+    "account": "Gemeinschaftskonto",
+    "category": "Lebensmittel",
+    "title": "Biomarkt",
+    "type": "expense",
+    "amountMinor": 4500,
+    "month": "2025-02",
+    "bookDate": "2025-02-01",
+    "status": "pending",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "feb25-versicherung",
+    "account": "Gemeinschaftskonto",
+    "category": "Versicherung",
+    "title": "Haftpflichtversicherung",
+    "type": "expense",
+    "amountMinor": 24000,
+    "month": "2025-02",
+    "bookDate": "2025-02-01",
+    "status": "pending",
+    "isFromSharedAccount": false,
+    "member": "Tony"
+  },
+  {
+    "localId": "feb25-miete",
+    "account": "Gemeinschaftskonto",
+    "category": "Miete",
+    "title": "Miete",
+    "type": "expense",
+    "amountMinor": 95000,
+    "month": "2025-02",
+    "bookDate": "2025-02-01",
+    "status": "pending",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "feb25-kindergeld",
+    "account": "Gemeinschaftskonto",
+    "title": "Kindergeld",
+    "type": "income",
+    "amountMinor": 25000,
+    "month": "2025-02",
+    "bookDate": "2025-02-01",
+    "status": "pending",
+    "isFromSharedAccount": true,
+    "member": "Caro"
+  },
+
+  // ── Gemeinschaftskonto / 2025-03 (pending) ───────────────────────────────
+
+  {
+    "localId": "mar25-kino",
+    "account": "Gemeinschaftskonto",
+    "category": "Freizeit",
+    "title": "Kinoabend",
+    "type": "expense",
+    "amountMinor": 5000,
+    "month": "2025-03",
+    "bookDate": "2025-03-01",
+    "status": "pending",
+    "isFromSharedAccount": false,
+    "member": "Tony"
+  },
+  {
+    "localId": "mar25-aldi",
+    "account": "Gemeinschaftskonto",
+    "category": "Lebensmittel",
+    "title": "Aldi Einkauf",
+    "type": "expense",
+    "amountMinor": 7000,
+    "month": "2025-03",
+    "bookDate": "2025-03-01",
+    "status": "pending",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "mar25-miete",
+    "account": "Gemeinschaftskonto",
+    "category": "Miete",
+    "title": "Miete",
+    "type": "expense",
+    "amountMinor": 95000,
+    "month": "2025-03",
+    "bookDate": "2025-03-01",
+    "status": "pending",
+    "isFromSharedAccount": true
+  },
+
+  // ── Gemeinschaftskonto / 2025-07 ─────────────────────────────────────────
+
+  {
+    "localId": "jul25-topup",
+    "account": "Gemeinschaftskonto",
+    "title": "TopUp Urlaub",
+    "type": "income",
+    "amountMinor": 50000,
+    "month": "2025-07",
+    "bookDate": "2025-07-01",
+    "status": "booked",
+    "isFromSharedAccount": true
+  },
+
+  // ── NEUE TEST-DATEN: Split-Transactions (Jan 2026, booked) ────────────────
+  //
+  // Variante A: Container-only (Rest = 0)
+  //   Saturn Einkauf 349,99€ → 3 Children die exakt aufgehen
+
+  {
+    "localId": "jan26-saturn",
+    "account": "Gemeinschaftskonto",
+    "title": "Saturn Einkauf",
+    "type": "expense",
+    "amountMinor": 34999,
+    "month": "2026-01",
+    "bookDate": "2026-01-22",
+    "status": "booked",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "jan26-saturn-c1",
+    "account": "Gemeinschaftskonto",
+    "category": "Freizeit",
+    "title": "Kopfhörer Sony WH-1000",
+    "type": "expense",
+    "amountMinor": 14999,
+    "month": "2026-01",
+    "bookDate": "2026-01-22",
+    "status": "booked",
+    "isFromSharedAccount": true,
+    "parentRef": "jan26-saturn"
+  },
+  {
+    "localId": "jan26-saturn-c2",
+    "account": "Gemeinschaftskonto",
+    "title": "USB-C Netzteil",
+    "type": "expense",
+    "amountMinor": 1200,
+    "month": "2026-01",
+    "bookDate": "2026-01-22",
+    "status": "booked",
+    "isFromSharedAccount": true,
+    "parentRef": "jan26-saturn"
+  },
+  {
+    "localId": "jan26-saturn-c3",
+    "account": "Gemeinschaftskonto",
+    "category": "Freizeit",
+    "title": "Bluetooth Lautsprecher",
+    "type": "expense",
+    "amountMinor": 18800,
+    "month": "2026-01",
+    "bookDate": "2026-01-22",
+    "status": "booked",
+    "isFromSharedAccount": true,
+    "parentRef": "jan26-saturn"
+  },
+
+  // Variante B: Hybrid-Parent (Rest > 0)
+  //   REWE Großeinkauf 150€ → 1 Child 42€ → Rest 108€ verbleibt als Lebensmittel
+
+  {
+    "localId": "jan26-rewe-gross",
+    "account": "Gemeinschaftskonto",
+    "category": "Lebensmittel",
+    "title": "REWE Großeinkauf",
+    "type": "expense",
+    "amountMinor": 15000,
+    "month": "2026-01",
+    "bookDate": "2026-01-14",
+    "status": "booked",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "jan26-rewe-gross-c1",
+    "account": "Gemeinschaftskonto",
+    "category": "Versicherung",
+    "title": "Waschmittel & Reiniger",
+    "type": "expense",
+    "amountMinor": 4200,
+    "month": "2026-01",
+    "bookDate": "2026-01-14",
+    "status": "booked",
+    "isFromSharedAccount": true,
+    "parentRef": "jan26-rewe-gross"
+  },
+
+  // Normale Jan 2026
+
+  {
+    "localId": "jan26-miete",
+    "account": "Gemeinschaftskonto",
+    "category": "Miete",
+    "title": "Miete Januar 2026",
+    "type": "expense",
+    "amountMinor": 95000,
+    "month": "2026-01",
+    "bookDate": "2026-01-01",
+    "status": "booked",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "jan26-gehalt-tony",
+    "account": "Gemeinschaftskonto",
+    "title": "Gehalt Tony",
+    "type": "income",
+    "amountMinor": 300000,
+    "month": "2026-01",
+    "bookDate": "2026-01-28",
+    "status": "booked",
+    "isFromSharedAccount": false,
+    "member": "Tony"
+  },
+  {
+    "localId": "jan26-gehalt-caro",
+    "account": "Gemeinschaftskonto",
+    "title": "Gehalt Caro",
+    "type": "income",
+    "amountMinor": 210000,
+    "month": "2026-01",
+    "bookDate": "2026-01-28",
+    "status": "booked",
+    "isFromSharedAccount": false,
+    "member": "Caro"
+  },
+
+  // ── NEUE TEST-DATEN: Split pending (Feb 2026) ─────────────────────────────
+  //
+  // Variante C: Pending Split mit Children
+  //   Ikea 249€ → 2 Children → Rest 174,11€ als Hybrid-Parent
+
+  {
+    "localId": "feb26-ikea",
+    "account": "Gemeinschaftskonto",
+    "title": "Ikea Einkauf",
+    "type": "expense",
+    "amountMinor": 24900,
+    "month": "2026-02",
+    "bookDate": null,
+    "status": "pending",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "feb26-ikea-c1",
+    "account": "Gemeinschaftskonto",
+    "category": "Freizeit",
+    "title": "Bilderrahmen Set",
+    "type": "expense",
+    "amountMinor": 1999,
+    "month": "2026-02",
+    "bookDate": null,
+    "status": "pending",
+    "isFromSharedAccount": true,
+    "parentRef": "feb26-ikea"
+  },
+  {
+    "localId": "feb26-ikea-c2",
+    "account": "Gemeinschaftskonto",
+    "category": "Lebensmittel",
+    "title": "Küchenutensilien",
+    "type": "expense",
+    "amountMinor": 5490,
+    "month": "2026-02",
+    "bookDate": null,
+    "status": "pending",
+    "isFromSharedAccount": true,
+    "parentRef": "feb26-ikea"
+  },
+
+  // Normale Feb 2026
+
+  {
+    "localId": "feb26-miete",
+    "account": "Gemeinschaftskonto",
+    "category": "Miete",
+    "title": "Miete Februar 2026",
+    "type": "expense",
+    "amountMinor": 95000,
+    "month": "2026-02",
+    "bookDate": null,
+    "status": "pending",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "feb26-einkauf",
+    "account": "Gemeinschaftskonto",
+    "category": "Lebensmittel",
+    "title": "Wocheneinkauf EDEKA",
+    "type": "expense",
+    "amountMinor": 9120,
+    "month": "2026-02",
+    "bookDate": null,
+    "status": "pending",
+    "isFromSharedAccount": true
+  },
+  {
+    "localId": "feb26-theater",
+    "account": "Gemeinschaftskonto",
+    "category": "Freizeit",
+    "title": "Theatertickets",
+    "type": "expense",
+    "amountMinor": 6000,
+    "month": "2026-02",
+    "bookDate": null,
+    "status": "pending",
+    "isFromSharedAccount": false,
+    "member": "Tony"
+  }
+]

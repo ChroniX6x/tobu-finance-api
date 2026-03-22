@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "mongod",
+      "type": "shell",
+      "command": "npm run mongod",
+      "presentation": { "panel": "new", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "presentation": { "panel": "new", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "start:dev",
+      "dependsOn": ["mongod", "dev"],
+      "dependsOrder": "parallel"
+    }
+  ]
+}
