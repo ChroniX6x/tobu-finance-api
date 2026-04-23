@@ -115,6 +115,7 @@ Sinnvoller ist ein inkrementeller Aufbau:
 **Mögliche Quelle:**
 - `GET /api/accounts/{id}/expanded` als gebündelte Basis
 - ergänzend ggf. spezialisierte Requests, falls nötig
+- dedizierter `GET /accounts/{accountId}/month-view?month=YYYY-MM` Endpoint als Zielbild für das finale ReadModel
 
 **DoD:**
 - dokumentiert, welche Daten die Seite zwingend braucht
@@ -285,6 +286,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 - Soll
 - Gezahlt
 - Offen
+- Übertrag
 - Progressbar
 - letzte Einzahlung
 - private Vorleistung
@@ -417,6 +419,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 - Summen stimmen mit Member-Cards überein
 - Breakdown ist verständlich
 - Nutzer kann nachvollziehen, warum Soll-Werte so sind
+- abgeleitete Base-Blöcke aus CategoryBudgets und `customSplit`-Pools sind genauso sichtbar wie explizit persistierte `additional`-/`topup`-Blöcke
 
 ---
 
@@ -521,6 +524,7 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 **Wichtig bei MVP:**
 - Monat-Seite darf nicht implizit „0 = alles ok“ suggerieren
 - fehlende Grundlage muss als fehlende Grundlage sichtbar sein
+- fehlendes `paidByMemberId`, fehlende ProRata-Einkommen oder nicht auflösbare Custom-Split-Pools müssen gezielt als Daten-/Setup-Lücke erkennbar sein
 
 **DoD:**
 - klare Missing-State-Komponenten
@@ -655,7 +659,7 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 Es muss ein spezialisierter Endpoint für die Monat-Seite existieren.
 
 Beispiel:
-GET /accounts/{accountId}/month-view?monthAnchor=DATE
+GET /accounts/{accountId}/month-view?month=YYYY-MM
 
 Dieser Endpoint liefert:
 - KPIs
@@ -664,6 +668,10 @@ Dieser Endpoint liefert:
 - Beitragslogik
 - Detailtabellen-Daten
 
+Wichtig:
+- Dieser Endpoint ist ein dedizierter Month-View-Endpunkt.
+- Er darf nicht nur eine umbenannte Ableitung des bestehenden Overview-Endpunkts sein.
+
 Frontend darf keine komplexe Aggregation durchführen.
 
 ---
@@ -671,7 +679,7 @@ Frontend darf keine komplexe Aggregation durchführen.
 #### Task 2.4 – Backend Aggregation Service implementieren
 
 Service:
-buildMonthView(accountId, monthAnchor)
+buildMonthView(accountId, month)
 
 Dieser Service aggregiert:
 - Transactions (gefiltert nach Monat)
@@ -679,6 +687,11 @@ Dieser Service aggregiert:
 - ContributionRules
 - MemberIncomes
 - CarryOver
+
+Zusätzlich gilt:
+- `paidByMemberId` muss für Mitgliedseinzahlungen und private Vorleistungen explizit ausgewertet werden.
+- Base-Blöcke dürfen aus Budgets und gruppierten `customSplit`-Pools abgeleitet werden.
+- Persistierte Contribution Rules bleiben für `additional`, `topup` und Sonderkorrekturen relevant.
 
 ---
 
@@ -690,26 +703,29 @@ Folgende Tabellen werden im Backend berechnet:
 - Income Basis
 - Kategorie Details
 
+Zusätzlich vorbereiten:
+- Member-Card-Werte inklusive `carryover` und `privatePrepayment`
+- getrennte Settlement-/Ausgleichsinformation für privat bezahlte gemeinsame Ausgaben
+
 Diese werden als fertige Struktur an das Frontend geliefert.
 
 ---
 
-## Ergänzung B – Monatsanker statt YYYY-MM
+## Ergänzung B – Externer Monatsparameter und interne Normalisierung
 
 ### Neue Regel
 
 Alle Monatsberechnungen basieren auf:
 
-monthAnchor: Date
+month: YYYY-MM
 
-Format:
-YYYY-MM-01T00:00:00.000Z
+Intern darf dieser Wert auf einen Monatsanker normalisiert werden.
 
 ---
 
 ### Task 3.6 – Monatsanker-basierte Filterung implementieren
 
-Alle Daten müssen anhand des Monatsankers gefiltert werden:
+Alle Daten müssen anhand des ausgewählten Monats gefiltert werden:
 
 - Transactions → liegen im Monat
 - Budgets → gültig im Monat
@@ -720,7 +736,11 @@ Alle Daten müssen anhand des Monatsankers gefiltert werden:
 
 ### Wichtige Regel
 
-YYYY-MM Strings dürfen NICHT verwendet werden.
+Extern wird im MVP `YYYY-MM` verwendet; intern darf auf einen Monatsanker normalisiert werden.
+
+Pending zählt im MVP mit, die Architektur soll aber einen späteren Pending-Switch vorbereiten.
+
+Private Vorleistungen sind im ReadModel getrennt von normalen Mitgliedseinzahlungen zu führen.
 
 ---
 

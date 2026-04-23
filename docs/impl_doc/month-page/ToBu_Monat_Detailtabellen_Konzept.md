@@ -118,6 +118,8 @@ Die Tabelle muss deshalb sichtbar machen:
 - welchen Betrag sie beitragen,
 - und wie daraus pro Mitglied der Gesamt-Sollbetrag entsteht.
 
+Für den Month-View dürfen Base-Blöcke dabei auch aus `CategoryBudget`-Bedarfen und gruppierten `customSplit`-Pools abgeleitet werden. Explizit persistierte Contribution Rules bleiben daneben für `additional`, `topup` und Sonderkorrekturen sichtbar.
+
 ---
 
 ## 5.3 Position im UI
@@ -215,6 +217,8 @@ Sie wird nur angezeigt, wenn im aktuellen Monat mindestens ein aktiver Beitragsb
 
 Wenn kein ProRata aktiv ist, entfällt die Tabelle vollständig.
 
+Sie bezieht sich nur auf echte ProRata-Blöcke, nicht automatisch auf Base-Custom-Split-Blöcke.
+
 ---
 
 ## 6.4 Spaltenvorschlag
@@ -304,6 +308,7 @@ Später optional:
 - Transaktionsanzahl
 - letzte Buchung
 - Trend zur Vorperiode
+- Hinweis auf verwendeten `customSplit`
 
 Diese Spalten sind für MVP nicht zwingend.
 
@@ -372,6 +377,8 @@ Im Member-Card-Kontext oder im Beitrags-Accordion.
 ## Member-Cards ↔ Contribution Breakdown
 - Cards zeigen Ergebnis
 - Tabelle zeigt Zusammensetzung
+- Übertrag bleibt als eigener Card-Wert sichtbar und ist nicht einfach nur eine Breakdown-Spalte.
+- Private Vorleistung / Ausgleich bleibt getrennt von normalen Mitgliedseinzahlungen.
 
 ## Beitragslogik ↔ Income Basis
 - Beitragslogik erklärt qualitativ

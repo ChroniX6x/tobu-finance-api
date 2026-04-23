@@ -5,14 +5,9 @@
 **Zielgruppe:** Neue Entwickler, Agents, Designer oder Reviewer, die das Projekt noch nicht kennen.
 
 ---
+## 1. Ziel dieser Seite
 
-## 1. Kurzbeschreibung
-
-Die **Monat**-Seite ist der operative Monats‑Arbeitsbereich eines Accounts.  
-Sie ergänzt die bestehende **Account Overview**-Seite und die **Buchungsseite**.
-
-Ihre Kernaufgabe ist nicht, „noch ein Dashboard“ zu sein, sondern einen Monat so darzustellen, dass Nutzer direkt verstehen:
-
+Die Monat‑Seite soll für einen ausgewählten Monat auf einen Blick zeigen:
 1. **wie hoch der Monatsbedarf ist**,  
 2. **wie viel bereits eingezahlt wurde**,  
 3. **wie viel ausgegeben wurde**,  
@@ -77,6 +72,11 @@ Zusätzlich ist im Domänenmodell bereits alles vorhanden, was für diese Seite 
 
 Die Monat‑Seite ist daher ein sinnvoller nächster Schritt nach Wizard, Accounts, Account Overview und Buchungsseite.
 
+Wichtig für die Umsetzung im MVP:
+- Die Monat‑Seite baut auf einem **dedizierten Month-View-ReadModel** auf.
+- Sie ist **keine bloße Erweiterung des Overview-ReadModels**.
+- Frontend und Backend erhalten dafür einen eigenen Month-View-Pfad im Account-Kontext.
+
 ---
 
 ## 5. Kanonische Begriffe für diese Seite
@@ -84,7 +84,11 @@ Die Monat‑Seite ist daher ein sinnvoller nächster Schritt nach Wizard, Accoun
 Damit neue Entwickler die Seite korrekt umsetzen, gelten diese Begriffe:
 
 ### 5.1 Monat
-Der gesamte Screen ist auf **einen Monat** bezogen. Monatshandling folgt dem Systemprinzip `YYYY-MM` / Month‑Anchor. fileciteturn7file2turn7file3
+Der gesamte Screen ist auf **einen Monat** bezogen. Monatshandling folgt dem Systemprinzip Month‑Anchor. fileciteturn7file2turn7file3
+
+Für den MVP gilt zusätzlich:
+- externer Query-/Request-Vertrag zunächst über **`YYYY-MM`**,
+- interne Normalisierung auf den jeweiligen Monatsanker ist weiterhin erlaubt.
 
 ### 5.2 Monatsbedarf
 Gesamtwert, der ausdrückt, welcher Bedarf für den aktuellen Monat entsteht.
@@ -97,6 +101,9 @@ Summe aller relevanten Monatsausgaben.
 
 ### 5.5 Übertrag
 Korrekturwert aus `carryovers`, der in die Monatslogik einfließt. Carryovers sind im Modell explizit als Übertrag/Korrektur pro Mitglied vorgesehen und können positiv oder negativ sein. fileciteturn7file1turn7file2
+
+Für die KPI-Leiste bedeutet das im MVP:
+- **`Übertrag` = Summe aller Carryovers des ausgewählten Monats**.
 
 ### 5.6 Beitragsbausteine
 Die Einzahlungslogik basiert **nicht** auf genau einer aktiven Regel, sondern auf mehreren gleichzeitig wirksamen Bausteinen. Das folgt aus dem Modell `contribution_rules` mit `type = base | additional | topup`. fileciteturn7file1turn7file3
@@ -127,7 +134,6 @@ Die Seite ist als **zusätzlicher Tab** im Accountbereich gedacht, neben:
 - Übersicht
 - Buchungen
 - Monat
-
 So bleibt die Seite klar im Kontext eines Accounts und wirkt nicht wie ein komplett eigener Navigationsbereich.
 
 ---
@@ -146,12 +152,14 @@ Im Header gibt es eine Monat/Jahr-Auswahl.
 
 Begründung:
 - Ein solcher Switch wäre redundant, wenn mehrere Seiten Pending berücksichtigen.
-- Pending ist laut Systemprinzip global relevant und soll konsistent, aber nicht als großer Sonderblock pro Seite auftauchen. fileciteturn7file2
+- Pending ist laut Systemprinzip global relevant und soll konsistent, aber nicht als großer Sonderblock pro Seite auftauchen. 
 
 **Finale Entscheidung:**
 - Pending wird **vereinheitlicht im Account-Kontext** behandelt.
 - Die Monat‑Seite kann höchstens einen kleinen Statushinweis / Chip anzeigen, ob Pending enthalten ist.
 - Kein großer Schalter als dominantes Seitenelement.
+- Pending wird im MVP **fachlich mit eingerechnet**.
+- UI und State sollen aber bereits so vorbereitet werden, dass ein späterer Pending-Switch ohne strukturellen Umbau ergänzt werden kann.
 
 ---
 
@@ -228,6 +236,7 @@ Jede Member-Card zeigt:
 - Soll
 - Gezahlt
 - Offen
+- Übertrag
 - Progressbar
 - letzte Einzahlung
 - private Vorleistung
@@ -243,6 +252,9 @@ Tatsächlich geleistete Mitgliedseinzahlungen für den Monat.
 
 #### Offen
 Differenz zwischen Soll und Gezahlt.
+
+#### Übertrag
+Zeigt den für dieses Mitglied wirksamen Carryover-Wert des ausgewählten Monats.
 
 #### Letzte Einzahlung
 Zeigt die letzte erfasste Einzahlung dieses Mitglieds im aktuellen oder letzten relevanten Zeitraum.
@@ -264,6 +276,11 @@ Beim Klick öffnet sich idealerweise eine **Sidebar** mit:
 Die Monat‑Seite darf Einzahlungen direkt anlegen, obwohl Einzahlungen aktuell auch über die Buchungsseite erfasst werden. Das ist ausdrücklich gewünscht: die Monat‑Seite ist ein **spezialisierter Flow für Einzahlungen**.
 
 `paidByMemberId` soll **nicht global für alle Incomes verpflichtend** werden. Stattdessen ist der Monat‑Flow spezialisierter: Mitgliedseinzahlung kann über Kategorie/Flow gekennzeichnet und im UI sinnvoll geführt werden.
+
+Für die Month-View-Logik gilt dabei zusätzlich:
+- Kategorie/Flow allein reichen nicht als einzige Wiedererkennungslogik.
+- **`paidByMemberId` ist ein zentraler Identifikator** für mitgliedsbezogene Einzahlungen und Vorleistungen.
+- Mitgliedseinzahlungen müssen im ReadModel so wiederauffindbar sein, dass `paidAmount` pro Mitglied eindeutig und reproduzierbar berechnet werden kann.
 
 ---
 
@@ -369,6 +386,14 @@ Zeigt, woraus sich der Monatsbedarf zusammensetzt, z. B.:
 - Übertrag,
 - ggf. weitere monatliche Korrekturanteile.
 
+Für die fachliche Berechnung im MVP gilt:
+- `category_budgets` liefern den monatlichen Bedarf,
+- Kategorien **ohne** `customSplit` fließen in einen gemeinsamen Base-ProRata-Block,
+- Kategorien **mit** identischem `customSplit` fließen in eigene abgeleitete Base-Custom-Blöcke,
+- explizit persistierte Contribution Rules bleiben für `additional`, `topup` und sonstige Sonderkorrekturen bestehen.
+
+Dadurch bleibt die Contribution-Logik die primäre Quelle für Einzahlungs-Sollwerte, ohne dass kategoriespezifische Sonderverteilungen verloren gehen.
+
 #### Abschnitt B – Beitragsbausteine
 Listet die aktiven Bausteine dieses Monats, jeweils mit:
 - Name / Beschreibung,
@@ -379,8 +404,13 @@ Listet die aktiven Bausteine dieses Monats, jeweils mit:
 
 Typische Beispiele:
 - Basisbeitrag – pro-rata Einkommen,
+- Basisbeitrag – Kategoriepool mit Custom Split 70/30,
 - Zusatzbeitrag – Tony 100 %,
 - TopUp – custom split 60/40.
+
+Wichtig:
+- Der Bereich muss zwischen **Bedarf**, **Verteilung**, **tatsächlicher Zahlung**, **privater Vorleistung/Ausgleich** und **Carryover** unterscheiden.
+- Nicht jeder sichtbare Beitragsblock muss einer manuell persistierten Rule 1:1 entsprechen; Base-Blöcke dürfen im Month-ReadModel aus Budgets und Kategorieverteilungen abgeleitet werden.
 
 #### Abschnitt C – Einkommensbasis
 Nur relevant, wenn pro-rata verteilt wird.
@@ -388,6 +418,17 @@ Dann anzeigen:
 - Einkommen je Mitglied,
 - Verhältnis / Anteil,
 - abgeleitete Verteilung (z. B. 60/40).
+
+Die Income-Basis gilt nur für echte ProRata-Blöcke, nicht automatisch für Base-Custom- oder PerMember-Blöcke.
+
+#### Abschnitt D – Private Vorleistungen / Ausgleich
+Wenn gemeinsame Ausgaben privat bezahlt wurden, muss die Monat-Seite zusätzlich erklären:
+- wer die Ausgabe tatsächlich bezahlt hat,
+- welcher Anteil fachlich auf andere Mitglieder entfällt,
+- welcher Vorleistungs- bzw. Ausgleichswert daraus entsteht.
+
+Diese Vorleistungs-/Ausgleichswerte sind **kein normaler Contribution-Rule-Baustein**, sondern ein separater Settlement-Kanal.
+Ob dieser Ausgleich sofort in `monthlyDue` einfließt oder zunächst separat bis zum Carryover geführt wird, bleibt eine fachliche Detailentscheidung.
 
 ### 12.5 Detaillierte Tabellen per Accordion
 Auch hier gilt:
@@ -589,6 +630,8 @@ Die Seite kann im MVP auf einem Read‑Model über vorhandene Domänenobjekte au
 - `carryovers`,
 - `account_balances`. fileciteturn7file1turn7file2turn7file3
 
+Dieses ReadModel soll als **dedizierter Month-View-Endpunkt** umgesetzt werden und nicht als bloße Ableitung des bestehenden Overview-Endpunkts.
+
 ### 17.2 Domänenrealität zu Contribution Rules
 Contribution Rules sind laut Schema persistierte Regeln mit Typen `base`, `additional`, `topup` und unterschiedlichen Verteilungsmodi (`perMember`, `customSplit`, `proRataIncome`). Das UI muss diese Vielfalt erklären, nicht verstecken. fileciteturn7file1turn7file3
 
@@ -599,6 +642,10 @@ Im Masterkonzept ist noch offen, dass Mitgliedseinzahlungen fachlich nicht volls
 Pending zählt im MVP mit, muss aber markiert sein. Diese Systemregel bleibt gültig. Die Monat‑Seite soll Pending sichtbar, aber nicht redundant prominent machen. fileciteturn7file2
 
 ---
+
+Für die technische Umsetzung gilt an dieser Stelle zusätzlich:
+- `paidByMemberId` ist der zentrale Identifier für mitgliedsbezogene Einzahlungen und private Vorleistungen.
+- Ein echter Pending-Switch ist später möglich; ReadModel, State und UI-Slots sollen dafür aber bereits vorbereitet werden.
 
 ## 18. Nicht-Ziele dieser Seite
 
