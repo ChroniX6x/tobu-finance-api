@@ -908,13 +908,52 @@ paths:
                 $ref: '#/components/schemas/AccountOverview'
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /api/accounts/{id}/month-view:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      summary: Month view read-model
+      description: |
+        Returns a fully-calculated month read-model:
+        - KPIs (total due, paid, spent, carryover)
+        - Per-member contribution status with open amounts
+        - Category spend vs budget with status
+        - Contribution rule breakdown with per-member distribution
+        - Member incomes with income weights
+        - Carryovers for the month
+        Defaults to the current calendar month when `month` is omitted.
+      tags: [Accounts]
+      parameters:
+        - in: query
+          name: month
+          required: false
+          description: Target month in YYYY-MM format. Defaults to current month.
+          schema:
+            $ref: '#/components/schemas/Month'
+      responses:
+        '200':
+          description: Month view read-model
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthViewResponse'
+        '400':
+          description: Invalid account ID or month format
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Short-lived RS256 access token. Pass as `Authorization: Bearer <token>`.
+      description: "Short-lived RS256 access token. Pass as `Authorization: Bearer <token>`."
 
   parameters:
     IdParam:
@@ -1495,4 +1534,149 @@ components:
         date: { type: string, format: date-time }
         user: { type: string, nullable: true }
         text: { type: string }
+
+    # --- Month View ---
+    MonthViewResponse:
+      type: object
+      required: [account, kpis, members, categories, contributionBreakdown, memberIncomes, carryovers]
+      properties:
+        account:
+          $ref: '#/components/schemas/MonthViewAccount'
+        kpis:
+          $ref: '#/components/schemas/MonthViewKpis'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthViewMember'
+        categories:
+          type: array
+          description: Categories with spend vs budget status, sorted by spend descending
+          items:
+            $ref: '#/components/schemas/MonthViewCategory'
+        contributionBreakdown:
+          type: array
+          description: Per-rule contribution detail with per-member distribution
+          items:
+            $ref: '#/components/schemas/MonthViewContributionRule'
+        memberIncomes:
+          type: array
+          description: Member incomes active in the month with income weights
+          items:
+            $ref: '#/components/schemas/MonthViewMemberIncome'
+        carryovers:
+          type: array
+          description: Carryover entries for the month
+          items:
+            $ref: '#/components/schemas/MonthViewCarryover'
+
+    MonthViewAccount:
+      type: object
+      required: [id, monthIso]
+      properties:
+        id: { $ref: '#/components/schemas/ObjectId' }
+        name: { type: string, nullable: true }
+        monthIso:
+          type: string
+          description: The resolved target month in YYYY-MM format
+          example: "2025-08"
+
+    MonthViewKpis:
+      type: object
+      required: [totalDueMinor, totalPaidMinor, totalSpentMinor, carryoverTotalMinor]
+      properties:
+        totalDueMinor:
+          type: integer
+          description: Sum of all active contribution rules for this month (minor units)
+        totalPaidMinor:
+          type: integer
+          description: Sum of booked income transactions in this month (minor units)
+        totalSpentMinor:
+          type: integer
+          description: Sum of booked expense transactions in this month (minor units)
+        carryoverTotalMinor:
+          type: integer
+          description: Sum of all member carryovers for this month (can be negative)
+
+    MonthViewMember:
+      type: object
+      required: [id, role, monthlyDueMinor, paidAmountMinor, openAmountMinor, paid, carryoverMinor]
+      properties:
+        id: { $ref: '#/components/schemas/ObjectId' }
+        name: { type: string, nullable: true }
+        avatar: { type: string, nullable: true }
+        role: { type: string, enum: [owner, member] }
+        monthlyDueMinor:
+          type: integer
+          description: Calculated monthly contribution amount for this member (minor units)
+        paidAmountMinor:
+          type: integer
+          description: Sum of booked income transactions by this member (minor units)
+        openAmountMinor:
+          type: integer
+          description: Remaining unpaid amount (max(0, due – paid)) in minor units
+        paid:
+          type: boolean
+          description: True when paidAmountMinor >= monthlyDueMinor (and due > 0)
+        carryoverMinor:
+          type: integer
+          description: Carryover amount for this member in this month (can be negative)
+
+    MonthViewCategory:
+      type: object
+      required: [id, spentMinor, status]
+      properties:
+        id: { $ref: '#/components/schemas/ObjectId' }
+        name: { type: string, nullable: true }
+        spentMinor:
+          type: integer
+          description: Sum of booked expenses in this category for the month
+        budgetMinor:
+          type: integer
+          nullable: true
+          description: Active budget for this category in this month. Null when no budget defined.
+        status:
+          type: string
+          enum: [ok, over, no_budget]
+          description: ok = within budget, over = over budget, no_budget = no budget defined
+
+    MonthViewContributionRule:
+      type: object
+      required: [ruleId, type, amountMinor, distributionMode, perMember]
+      properties:
+        ruleId: { $ref: '#/components/schemas/ObjectId' }
+        description: { type: string, nullable: true }
+        type:
+          type: string
+          enum: [base, additional, topup]
+        amountMinor: { type: integer }
+        distributionMode:
+          type: string
+          enum: [perMember, customSplit, proRataIncome]
+        perMember:
+          type: object
+          description: Map of memberId -> calculated amount in minor units
+          additionalProperties: { type: integer }
+
+    MonthViewMemberIncome:
+      type: object
+      required: [memberId, amountMinor, weight]
+      properties:
+        memberId: { $ref: '#/components/schemas/ObjectId' }
+        amountMinor:
+          type: integer
+          description: Sum of active income records for this member (minor units)
+        weight:
+          type: number
+          format: float
+          description: Proportional income weight (0–1) used for proRataIncome distribution
+
+    MonthViewCarryover:
+      type: object
+      required: [memberId, amountMinor]
+      properties:
+        memberId: { $ref: '#/components/schemas/ObjectId' }
+        amountMinor:
+          type: integer
+          description: Carryover amount in minor units (can be negative)
+        reason: { type: string }
 
