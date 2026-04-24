@@ -356,11 +356,11 @@ Folgende UI-Namen wurden als passend bewertet:
 - **So wird dein Monat berechnet**
 - **Berechnungsgrundlage**
 
-Der stärkste inhaltliche Titel für die ganze Fläche ist:
+Der finale Titel für die ganze Fläche ist:
 
-**„So wird dein Monat berechnet“**
+**„Beitragslogik"**
 
-Darin können Unterabschnitte z. B. „Beitragslogik“ oder „Berechnungsgrundlage“ heißen.
+Unterabschnitte dieses Bereichs können z. B. „Monatsbasis", „Beitragsbausteine" oder „Berechnungsgrundlage" heißen.
 
 ### 12.3 Zentrale Korrektur gegenüber früherem Denkmodell
 Dieser Bereich darf **nicht** so wirken, als gäbe es genau **eine aktive Contribution Rule**.
@@ -601,7 +601,7 @@ Hier die konkret festgezurrten Änderungen, die gegenüber dem ersten Bild gelte
 14. **Unterer Logikbereich finalisiert** als Erklärfläche unterhalb des Kategorienbereichs.  
 15. **Contribution-Logik korrigiert** von „eine Regel“ zu „mehrere Beitragsbausteine“.  
 16. **Einkommensbasis** wird sichtbar, wenn pro-rata relevant ist.  
-17. **Namensraum des Logikbereichs finalisiert**: „So wird dein Monat berechnet“ / „Beitragslogik“ / „Berechnungsgrundlage“.  
+17. **Namensraum des Logikbereichs finalisiert**: „Beitragslogik" als primärer Titel; Unterabschnitte: „Monatsbasis", „Beitragsbausteine", „Berechnungsgrundlage".  
 
 ---
 
@@ -614,7 +614,7 @@ Hier die konkret festgezurrten Änderungen, die gegenüber dem ersten Bild gelte
 5. Member-Cards  
 6. Kategorienbereich (2 Spalten)  
 7. Accordions für Kategoriedetails  
-8. Bereich „So wird dein Monat berechnet“  
+8. Bereich „Beitragslogik"  
 9. Accordions für Contribution-/Income-Details  
 
 ---
@@ -630,7 +630,9 @@ Die Seite kann im MVP auf einem Read‑Model über vorhandene Domänenobjekte au
 - `carryovers`,
 - `account_balances`. fileciteturn7file1turn7file2turn7file3
 
-Dieses ReadModel soll als **dedizierter Month-View-Endpunkt** umgesetzt werden und nicht als bloße Ableitung des bestehenden Overview-Endpunkts.
+Alle diese Domänenobjekte stehen über `GET /api/accounts/{id}/expanded` (mit `include`-Parameter) als Rohdaten-Bundle zur Verfügung und werden vom Backend für das Month-View-ReadModel aggregiert.
+
+Das ReadModel wird als **dedizierter Month-View-Endpunkt** (`GET /api/accounts/{id}/month-view?month=YYYY-MM`) bereitgestellt – analog zu `/api/accounts/{id}/overview`. Das Frontend macht ausschließlich diesen einen Request; eigene Aggregation im Frontend ist nicht vorgesehen.
 
 ### 17.2 Domänenrealität zu Contribution Rules
 Contribution Rules sind laut Schema persistierte Regeln mit Typen `base`, `additional`, `topup` und unterschiedlichen Verteilungsmodi (`perMember`, `customSplit`, `proRataIncome`). Das UI muss diese Vielfalt erklären, nicht verstecken. fileciteturn7file1turn7file3

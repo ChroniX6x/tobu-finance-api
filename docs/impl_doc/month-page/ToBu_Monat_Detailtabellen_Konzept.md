@@ -59,7 +59,7 @@ Unter oder innerhalb des Kategorien-Zweispalters.
 - detailliertere Kategorieprüfung
 - Zahlen hinter der kompakten Balkenliste
 
-## B. Accordion im Bereich „So wird dein Monat berechnet“
+## B. Accordion im Bereich „Beitragslogik"
 Unterhalb der Beitragslogik.
 
 **Zweck:**

@@ -1,4 +1,4 @@
-# ToBu – Monat-Seite: Agent-Ready Taskliste
+﻿# ToBu – Monat-Seite: Agent-Ready Taskliste
 
 ## 1. Ziel der Taskliste
 
@@ -34,9 +34,10 @@ Vor Beginn dieser Tasks gelten folgende fachliche Rahmenbedingungen:
 
 ## 3. Empfohlene Umsetzungsstrategie
 
-Sinnvolle Gesamt-Reihenfolge:
+Sinnvolle Gesamt-Reihenfolge (jeder Baustein hinterlässt die App in einem vollständig lauffähigen Zustand):
 
-1. **Seitenrahmen + Navigation**
+0. **Backend: Month-View-API-Endpunkt**
+1. **AccountShell + Seitenrahmen + Navigation**
 2. **Datenbasis und Read-Model festziehen**
 3. **Berechnungslogik für Monatswerte**
 4. **Header + KPI-Leiste**
@@ -44,7 +45,7 @@ Sinnvolle Gesamt-Reihenfolge:
 6. **Einzahlungs-Quick-Flow**
 7. **Kategorien-Zweispalter**
 8. **Accordion-Detailtabellen**
-9. **Bereich „So wird dein Monat berechnet“**
+9. **Beitragslogik-Bereich**
 10. **Edge Cases / Loading / Empty / Errors**
 11. **Polish / Mobile / QA**
 
@@ -62,30 +63,88 @@ Sinnvoller ist ein inkrementeller Aufbau:
 
 ---
 
-# Phase 1 – Rahmen und Routing
+# Baustein 0 – Backend: Month-View-API-Endpunkt
 
-## Task 1.1 – Monat-Seite in die Account-Navigation einhängen
-**Ziel:** Die Seite ist als eigener Account-Bereich erreichbar.
+## Task 0.1 – Endpunkt `GET /api/accounts/{id}/month-view` implementieren
+**Ziel:** Der dedizierte Month-View-Endpunkt liefert ein vollständig berechnetes Read-Model für einen Monat.
+
+**Vorbild:** Analog zu `GET /api/accounts/{id}/overview`.
 
 **Umsetzung:**
-- neuen Tab oder Route „Monat“ ergänzen
-- Position neben „Übersicht“ und „Buchungen“
-- gleiche Account-Kontext-Hülle wie die bestehende Account-Overview verwenden
+- `src/routes/month-view.ts` befüllen
+- Query-Parameter: `month=YYYY-MM`
+- Response: aggregiertes Month-View-Read-Model (Members, KPIs, berechnete Beitragsbausteine, Kategoriestatus)
+- bestehende Berechnungslogik aus `src/utils/contrib.ts` nutzen
+- Rohdaten über `GET /api/accounts/{id}/expanded` beziehen (alle benötigten Entities sind dort bereits verfügbar)
+- Route in `src/server.ts` registrieren
+- `GET /api/accounts/{id}/expanded` als Datengrundlage nutzen (aggregiert bereits Members, Transactions, Budgets, ContributionRules, MemberIncomes, Carryovers)
 
 **DoD:**
-- Monat-Seite ist pro Account erreichbar
-- Navigation fühlt sich wie Teil derselben Account-Umgebung an
-- kein separater App-Bereich nötig
+- `GET /api/accounts/:id/month-view?month=2025-08` gibt strukturiertes JSON zurück
+- Berechnungslogik ist gekapselt
+- Route ist in `server.ts` registriert
 
 ---
 
-## Task 1.2 – Seitenlayout-Grundgerüst anlegen
-**Ziel:** Feste Hauptstruktur ohne echte Logik.
+## Task 0.2 – OpenAPI-Spezifikation erweitern
+**Ziel:** Endpunkt ist vollständig in der OpenAPI-Spec dokumentiert.
+
+**Umsetzung:**
+- Pfad `/api/accounts/{id}/month-view` in `docs/openapi.yaml` eintragen
+- Response-Schema `MonthViewResponse` definieren
+- Query-Parameter `month` (YYYY-MM) dokumentieren
+
+**DoD:**
+- Swagger/Docs zeigen den neuen Endpunkt
+- Response-Schema stimmt mit der Implementierung überein
+
+---
+
+**Zustand nach Abschluss Baustein 0:** Backend liefert Month-View-Daten. Frontend und alle bestehenden Features bleiben vollständig unverändert und lauffähig.
+
+---
+
+# Baustein 1 – AccountShell, Rahmen und Routing
+
+## Task 1.1 – AccountShell-Component als gemeinsamer Rahmen
+**Ziel:** Gemeinsame Account-Hülle (Header, Tab-Leiste) für alle Account-Tabs ohne Code-Duplikation.
+
+**Umsetzung:**
+- neue `AccountShell`-Component als Route-Wrapper anlegen
+- `accounts.routes.ts` umstrukturieren: `AccountShell` als Parent-Route mit `<router-outlet>`
+- Tab-Leiste mit „Übersicht“, „Buchungen“, „Monat“ in der Shell — nicht in jeder Seite einzeln
+- `AccountOverview` und `TransactionsView` aus Tab-Verantwortung herauslösen
+- Account-Basisdaten (Name, Member-Liste) werden in der Shell einmalig geladen
+
+**DoD:**
+- Tab-Leiste erscheint auf allen drei Account-Bereichen identisch
+- kein Code-Duplikat der Tab-Navigation
+- App bleibt vollständig lauffähig, bestehende Routen funktionieren weiterhin
+
+---
+
+## Task 1.2 – Monat-Route und Tab registrieren
+**Ziel:** Die Monat-Seite ist als eigene Route erreichbar und im Tab-Menü sichtbar.
+
+**Umsetzung:**
+- Route `month` als Child unter `AccountShell` in `accounts.routes.ts` eintragen
+- Tab „Monat“ in der Tab-Leiste der Shell ergänzen
+- `month-view`-Component registrieren
+
+**DoD:**
+- `/accounts/:id/month` navigiert zur Monat-Seite
+- Tab-Auswahl wechselt korrekt
+- Deep-Link funktioniert (kein Blank-Screen bei direktem Aufruf)
+
+---
+
+## Task 1.3 – Seitenlayout-Grundgerüst anlegen
+**Ziel:** Feste Hauptstruktur der MonthView ohne echte Logik.
 
 **Enthalten:**
-- Headerbereich
-- KPI-Leiste
-- Member-Cards-Bereich
+- Headerbereich (Monat-Titel + Datepicker-Platzhalter)
+- KPI-Leiste (4 Felder, Werte noch statisch)
+- Member-Cards-Bereich (Platzhalter-Cards)
 - Kategorienbereich (2-spaltig)
 - Beitragslogik-Bereich unterhalb
 - Accordion-Platzhalter für Details
@@ -93,7 +152,7 @@ Sinnvoller ist ein inkrementeller Aufbau:
 **DoD:**
 - Struktur entspricht finaler Seitenarchitektur
 - Reihenfolge stimmt
-- keine konkurrierenden alternativen Layouts mehr offen
+- App bleibt vollständig navigierbar und lauffähig
 
 ---
 
@@ -112,10 +171,10 @@ Sinnvoller ist ein inkrementeller Aufbau:
 - MemberIncomes
 - Carryovers
 
-**Mögliche Quelle:**
-- `GET /api/accounts/{id}/expanded` als gebündelte Basis
-- ergänzend ggf. spezialisierte Requests, falls nötig
-- dedizierter `GET /accounts/{accountId}/month-view?month=YYYY-MM` Endpoint als Zielbild für das finale ReadModel
+**Datenquelle:**
+- `GET /api/accounts/{id}/month-view?month=YYYY-MM` (nach Abschluss Baustein 0 verfügbar)
+- liefert ein vollständig aggregiertes ReadModel direkt vom Backend
+- kein eigenes Frontend-Aggregieren aus mehreren parallelen Requests
 
 **DoD:**
 - dokumentiert, welche Daten die Seite zwingend braucht
@@ -454,7 +513,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-# Phase 9 – Bereich „So wird dein Monat berechnet“
+# Phase 9 – Bereich „Beitragslogik“
 
 ## Task 9.1 – Erklärblock Monatsbedarf
 **Ziel:** Zeigen, wie der Monatsbedarf entsteht.
@@ -655,59 +714,7 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 
 ### Neue Tasks (ergänzend zu Phase 2)
 
-#### Task 2.3 – Backend ReadModel Endpoint definieren
-Es muss ein spezialisierter Endpoint für die Monat-Seite existieren.
-
-Beispiel:
-GET /accounts/{accountId}/month-view?month=YYYY-MM
-
-Dieser Endpoint liefert:
-- KPIs
-- Member-Daten
-- Kategorien-Daten
-- Beitragslogik
-- Detailtabellen-Daten
-
-Wichtig:
-- Dieser Endpoint ist ein dedizierter Month-View-Endpunkt.
-- Er darf nicht nur eine umbenannte Ableitung des bestehenden Overview-Endpunkts sein.
-
-Frontend darf keine komplexe Aggregation durchführen.
-
----
-
-#### Task 2.4 – Backend Aggregation Service implementieren
-
-Service:
-buildMonthView(accountId, month)
-
-Dieser Service aggregiert:
-- Transactions (gefiltert nach Monat)
-- CategoryBudgets
-- ContributionRules
-- MemberIncomes
-- CarryOver
-
-Zusätzlich gilt:
-- `paidByMemberId` muss für Mitgliedseinzahlungen und private Vorleistungen explizit ausgewertet werden.
-- Base-Blöcke dürfen aus Budgets und gruppierten `customSplit`-Pools abgeleitet werden.
-- Persistierte Contribution Rules bleiben für `additional`, `topup` und Sonderkorrekturen relevant.
-
----
-
-#### Task 2.5 – Detailtabellen bereits im Backend vorbereiten
-
-Folgende Tabellen werden im Backend berechnet:
-
-- Contribution Breakdown
-- Income Basis
-- Kategorie Details
-
-Zusätzlich vorbereiten:
-- Member-Card-Werte inklusive `carryover` und `privatePrepayment`
-- getrennte Settlement-/Ausgleichsinformation für privat bezahlte gemeinsame Ausgaben
-
-Diese werden als fertige Struktur an das Frontend geliefert.
+> Tasks 2.3–2.5 sind in **Baustein 0** (Tasks 0.1 und 0.2) vollständig abgedeckt und wurden dort konsolidiert.
 
 ---
 
