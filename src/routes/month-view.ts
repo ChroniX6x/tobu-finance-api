@@ -14,7 +14,7 @@ import CarryOver from "../models/CarryOver.js";
 import ContributionRule from "../models/ContributionRule.js";
 
 import { validateQuery } from "../middleware/validate.js";
-import { monthRangeFromISO } from "../utils/date.js";
+import { monthRangeFromISO, toMonthAnchorISO } from "../utils/date.js";
 import { incomeWeights, distribute, type Dist } from "../utils/contrib.js";
 
 // ---- Validation ----
@@ -52,13 +52,9 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
   // Resolve target month
   const now = DateTime.utc();
   const monthParam: string | undefined = (req as any).q?.month;
-  const targetMonthISO = monthParam
-    ? DateTime.fromISO(`${monthParam}-01`, { zone: "utc" })
-        .set({ hour: 0, minute: 0, second: 0, millisecond: 0 })
-        .toISO({ suppressMilliseconds: false }) as string
-    : now
-        .set({ day: 1, hour: 0, minute: 0, second: 0, millisecond: 0 })
-        .toISO({ suppressMilliseconds: false }) as string;
+  const targetMonthISO: string = monthParam
+    ? toMonthAnchorISO(`${monthParam as string}-01`)
+    : toMonthAnchorISO(now.toJSDate());
 
   const { start: monthStart, end: monthEnd } = monthRangeFromISO(targetMonthISO);
 
@@ -187,12 +183,16 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
     const amount = Number((rule as { amountMinor?: number }).amountMinor ?? 0);
     if (!amount) continue;
     const partial = distribute(amount, ensureDist(rule), memberIds, incWeights);
-    for (const k of Object.keys(partial)) dueByMember[k] = (dueByMember[k] ?? 0) + partial[k];
+    for (const k of Object.keys(partial)) dueByMember[k] = (dueByMember[k] ?? 0) + (partial[k] ?? 0);
   }
 
   // ---- Transaction aggregation ----
   const paidByMember: Record<string, number> = {};
   const spentByCat: Record<string, number> = {};
+  /** ISO string of most-recent booked income transaction per member */
+  const lastPaymentDateByMember: Record<string, string> = {};
+  /** Sum of private-advance (isFromSharedAccount=false) expense amounts per member */
+  const privateAdvancesByMember: Record<string, number> = {};
   let totalPaidMinor = 0;
   let totalSpentMinor = 0;
 
@@ -203,21 +203,36 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
       amountMinor?: number;
       paidByMemberId?: unknown;
       categoryId?: unknown;
+      bookDate?: Date | null;
+      isFromSharedAccount?: boolean | null;
     };
     const amt = Number(t.amountMinor ?? 0);
-    // Only booked transactions count towards KPIs
+    // Only booked transactions count towards KPIs and aggregations
     if (t.status !== "booked") continue;
+
     if (t.type === "income") {
       totalPaidMinor += amt;
       if (t.paidByMemberId) {
         const mid = String(t.paidByMemberId);
         paidByMember[mid] = (paidByMember[mid] ?? 0) + amt;
+        // Track most recent payment date per member
+        if (t.bookDate) {
+          const iso = (t.bookDate instanceof Date ? t.bookDate : new Date(t.bookDate)).toISOString();
+          if (!lastPaymentDateByMember[mid] || iso > lastPaymentDateByMember[mid]) {
+            lastPaymentDateByMember[mid] = iso;
+          }
+        }
       }
     } else if (t.type === "expense") {
       totalSpentMinor += amt;
       if (t.categoryId) {
         const cid = String(t.categoryId);
         spentByCat[cid] = (spentByCat[cid] ?? 0) + amt;
+      }
+      // Track private advances: expenses paid out-of-pocket by a specific member
+      if (t.isFromSharedAccount === false && t.paidByMemberId) {
+        const mid = String(t.paidByMemberId);
+        privateAdvancesByMember[mid] = (privateAdvancesByMember[mid] ?? 0) + amt;
       }
     }
   }
@@ -247,6 +262,8 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
       openAmountMinor: Math.max(0, monthlyDue - paidAmount),
       paid: monthlyDue > 0 && paidAmount >= monthlyDue,
       carryoverMinor: carryoverAmt,
+      lastPaymentDate: lastPaymentDateByMember[mid] ?? null,
+      privateAdvancesMinor: privateAdvancesByMember[mid] ?? 0,
     };
   });
 
