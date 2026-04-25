@@ -58,6 +58,10 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
 
   const { start: monthStart, end: monthEnd } = monthRangeFromISO(targetMonthISO);
 
+  // History: last 6 months including current month
+  const HIST_MONTHS = 6;
+  const histStart = DateTime.fromISO(targetMonthISO).minus({ months: HIST_MONTHS - 1 }).toJSDate();
+
   // Build member ID list and role map from the account document
   const memberRefs = (account.members ?? []) as Array<{ memberId: unknown; role?: "owner" | "member" }>;
   const memberIds: string[] = memberRefs.map((m) => String(m.memberId));
@@ -65,7 +69,7 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
   for (const m of memberRefs) roleByMember[String(m.memberId)] = m.role ?? "member";
 
   // Fetch all required data in parallel
-  const [memberDocs, ruleDocs, incomeDocs, txDocs, carryoverDocs, categoryDocs, budgetDocs] =
+  const [memberDocs, ruleDocs, incomeDocs, txDocs, carryoverDocs, categoryDocs, budgetDocs, histTxDocs] =
     await Promise.all([
       // Member details (name + avatar)
       Member.find(
@@ -119,6 +123,17 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
           ],
         },
         { categoryId: 1, amountMinor: 1 }
+      ).lean(),
+
+      // Expense transactions for the last HIST_MONTHS months (for category history chart)
+      Transaction.find(
+        {
+          accountId,
+          type: "expense",
+          status: "booked",
+          month: { $gte: histStart, $lt: monthEnd },
+        },
+        { month: 1, categoryId: 1, amountMinor: 1 }
       ).lean(),
     ]);
 
@@ -312,6 +327,25 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
     reason: (co as { reason?: string }).reason ?? "",
   }));
 
+  // ---- Category history aggregation (last HIST_MONTHS months) ----
+  const spentByCatByMonth: Record<string, Record<string, number>> = {};
+  for (const tx of histTxDocs) {
+    const t = tx as { month?: unknown; categoryId?: unknown; amountMinor?: number };
+    if (!t.month || !t.categoryId) continue;
+    const rawDate = t.month instanceof Date ? t.month : new Date(String(t.month));
+    const monthKey = DateTime.fromJSDate(rawDate).toFormat("yyyy-MM");
+    const catId = String(t.categoryId);
+    if (!spentByCatByMonth[monthKey]) spentByCatByMonth[monthKey] = {};
+    (spentByCatByMonth[monthKey] as Record<string, number>)[catId] =
+      ((spentByCatByMonth[monthKey] as Record<string, number>)[catId] ?? 0) + Number(t.amountMinor ?? 0);
+  }
+  const categoryHistory = Array.from({ length: HIST_MONTHS }, (_, i) => {
+    const m = DateTime.fromISO(targetMonthISO)
+      .minus({ months: HIST_MONTHS - 1 - i })
+      .toFormat("yyyy-MM");
+    return { month: m, spentByCategoryId: (spentByCatByMonth[m] ?? {}) as Record<string, number> };
+  });
+
   // Resolve display month label (YYYY-MM)
   const resolvedMonthLabel = monthParam ?? now.set({ day: 1 }).toFormat("yyyy-MM");
 
@@ -332,6 +366,7 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
     contributionBreakdown,
     memberIncomes: memberIncomesResult,
     carryovers: carryoversResult,
+    categoryHistory,
   });
 });
 
