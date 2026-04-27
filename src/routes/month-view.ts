@@ -223,6 +223,8 @@ r.get("/:id/month-view", validateQuery(QueryMonthView), async (req, res) => {
     };
     const amt = Number(t.amountMinor ?? 0);
     // Only booked transactions count towards KPIs and aggregations
+    // MVP: booked transactions only for all aggregations (pending excluded).
+    // This ensures KPIs, per-member paid amounts and totalSpent are consistent.
     if (t.status !== "booked") continue;
 
     if (t.type === "income") {

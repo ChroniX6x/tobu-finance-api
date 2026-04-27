@@ -5,6 +5,7 @@
   "scripts": {
     "mongod": "mongod --dbpath D:\\mongodb\\db",
     "dev": "tsx watch src/server.ts",
+    "dev:debug": "node --inspect=9229 --watch --import=tsx/esm src/server.ts",
     "init:env": "ts-node scripts/ensure-env.ts",
     "predev": "npm run init:env",
     "migrate": "tsx src/migrate.ts up",
