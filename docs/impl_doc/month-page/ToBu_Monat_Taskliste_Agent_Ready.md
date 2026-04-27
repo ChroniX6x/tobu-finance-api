@@ -1,4 +1,4 @@
-﻿# ToBu – Monat-Seite: Agent-Ready Taskliste
+# ToBu – Monat-Seite: Agent-Ready Taskliste
 
 ## 1. Ziel der Taskliste
 
@@ -65,7 +65,7 @@ Sinnvoller ist ein inkrementeller Aufbau:
 
 # Baustein 0 – Backend: Month-View-API-Endpunkt
 
-## Task 0.1 – Endpunkt `GET /api/accounts/{id}/month-view` implementieren
+## Task 0.1 ✅ – Endpunkt `GET /api/accounts/{id}/month-view` implementieren
 **Ziel:** Der dedizierte Month-View-Endpunkt liefert ein vollständig berechnetes Read-Model für einen Monat.
 
 **Vorbild:** Analog zu `GET /api/accounts/{id}/overview`.
@@ -86,7 +86,7 @@ Sinnvoller ist ein inkrementeller Aufbau:
 
 ---
 
-## Task 0.2 – OpenAPI-Spezifikation erweitern
+## Task 0.2 ✅ – OpenAPI-Spezifikation erweitern
 **Ziel:** Endpunkt ist vollständig in der OpenAPI-Spec dokumentiert.
 
 **Umsetzung:**
@@ -106,13 +106,13 @@ Sinnvoller ist ein inkrementeller Aufbau:
 
 # Baustein 1 – AccountShell, Rahmen und Routing
 
-## Task 1.1 – AccountShell-Component als gemeinsamer Rahmen
+## Task 1.1 ✅ – AccountShell-Component als gemeinsamer Rahmen
 **Ziel:** Gemeinsame Account-Hülle (Header, Tab-Leiste) für alle Account-Tabs ohne Code-Duplikation.
 
 **Umsetzung:**
 - neue `AccountShell`-Component als Route-Wrapper anlegen
 - `accounts.routes.ts` umstrukturieren: `AccountShell` als Parent-Route mit `<router-outlet>`
-- Tab-Leiste mit „Übersicht“, „Buchungen“, „Monat“ in der Shell — nicht in jeder Seite einzeln
+- Tab-Leiste mit „Übersicht“, „Buchungen“, „Monat“ in der Shell – nicht in jeder Seite einzeln
 - `AccountOverview` und `TransactionsView` aus Tab-Verantwortung herauslösen
 - Account-Basisdaten (Name, Member-Liste) werden in der Shell einmalig geladen
 
@@ -123,7 +123,7 @@ Sinnvoller ist ein inkrementeller Aufbau:
 
 ---
 
-## Task 1.2 – Monat-Route und Tab registrieren
+## Task 1.2 ✅ – Monat-Route und Tab registrieren
 **Ziel:** Die Monat-Seite ist als eigene Route erreichbar und im Tab-Menü sichtbar.
 
 **Umsetzung:**
@@ -138,7 +138,7 @@ Sinnvoller ist ein inkrementeller Aufbau:
 
 ---
 
-## Task 1.3 – Seitenlayout-Grundgerüst anlegen
+## Task 1.3 ✅ – Seitenlayout-Grundgerüst anlegen
 **Ziel:** Feste Hauptstruktur der MonthView ohne echte Logik.
 
 **Enthalten:**
@@ -158,7 +158,7 @@ Sinnvoller ist ein inkrementeller Aufbau:
 
 # Phase 2 – Datenbasis und Read-Model
 
-## Task 2.1 – Monatssicht-Datenquellen definieren
+## Task 2.1 ✅ – Monatssicht-Datenquellen definieren
 **Ziel:** Klar festlegen, welche Entities und Endpunkte für die Seite benötigt werden.
 
 **Für die Monat-Seite relevant:**
@@ -183,7 +183,7 @@ Sinnvoller ist ein inkrementeller Aufbau:
 
 ---
 
-## Task 2.2 – Monatsspezifisches Read-Model im Frontend definieren
+## Task 2.2 ✅ – Monatsspezifisches Read-Model im Frontend definieren
 **Ziel:** Rohdaten aus API nicht direkt ins UI geben, sondern in eine Monats-Sichtstruktur transformieren.
 
 **Empfohlene View-Model-Bereiche:**
@@ -204,7 +204,7 @@ Sinnvoller ist ein inkrementeller Aufbau:
 
 # Phase 3 – Monatsberechnung
 
-## Task 3.1 – Monatsbedarf berechnen
+## Task 3.1 ✅ – Monatsbedarf berechnen
 **Ziel:** Ein zentraler Wert „Monatsbedarf“ wird korrekt hergeleitet.
 
 **Zusammensetzung:**
@@ -224,7 +224,7 @@ Der Monatsbedarf ist ein **Plan-/Soll-Wert**, kein reiner Ist-Wert.
 
 ---
 
-## Task 3.2 – Aktive Beitragsbausteine für den Monat auflösen
+## Task 3.2 ✅ – Aktive Beitragsbausteine für den Monat auflösen
 **Ziel:** Für den ausgewählten Monat alle relevanten Beitragsbausteine ermitteln.
 
 **Bausteintypen laut Modell:**
@@ -246,7 +246,7 @@ Der Monatsbedarf ist ein **Plan-/Soll-Wert**, kein reiner Ist-Wert.
 
 ---
 
-## Task 3.3 – Member-Sollwerte (`monthlyDue`) berechnen
+## Task 3.3 ✅ – Member-Sollwerte (`monthlyDue`) berechnen
 **Ziel:** Für jedes Mitglied den Monats-Sollwert berechnen.
 
 **Grundlage:**
@@ -266,7 +266,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 3.4 – Tatsächlich gezahlte Beiträge (`paidAmount`) bestimmen
+## Task 3.4 ✅ – Tatsächlich gezahlte Beiträge (`paidAmount`) bestimmen
 **Ziel:** Für jedes Mitglied erfassen, was im Monat tatsächlich eingezahlt wurde.
 
 **MVP-Regel:**
@@ -285,7 +285,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 3.5 – Private Vorleistungen berechnen
+## Task 3.5 ✅ – Private Vorleistungen berechnen
 **Ziel:** Sichtbar machen, welche privat bezahlten Transaktionen je Mitglied relevant sind.
 
 **Grundlage:**
@@ -304,7 +304,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 # Phase 4 – Header und KPI-Leiste
 
-## Task 4.1 – Month Header mit Month-only Auswahl
+## Task 4.1 ✅ – Month Header mit Month-only Auswahl
 **Ziel:** Monat klar fokussieren.
 
 **UI:**
@@ -319,7 +319,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 4.2 – KPI-Leiste bauen
+## Task 4.2 ✅ – KPI-Leiste bauen
 **Ziel:** Vier zentrale Monatskennzahlen auf oberster Ebene zeigen.
 
 **Final festgezurrte KPIs:**
@@ -337,7 +337,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 # Phase 5 – Member-Cards
 
-## Task 5.1 – Member-Cards als Primärdarstellung
+## Task 5.1 ✅ – Member-Cards als Primärdarstellung
 **Ziel:** Beiträge je Mitglied nicht tabellarisch, sondern als Cards darstellen.
 
 **Pro Card:**
@@ -358,7 +358,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 5.2 – Offen-Wert berechnen
+## Task 5.2 ✅ – Offen-Wert berechnen
 **Ziel:** Restbetrag je Mitglied anzeigen.
 
 **Formel:**
@@ -374,7 +374,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 # Phase 6 – Einzahlung-Flow aus der Monat-Seite
 
-## Task 6.1 – CTA „Einzahlung buchen“ an Member koppeln
+## Task 6.1 ✅ – CTA „Einzahlung buchen“ an Member koppeln
 **Ziel:** Einzahlungen direkt aus der Member-Card starten.
 
 **Flow:**
@@ -392,7 +392,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 6.2 – Technische Speicherung der Einzahlung definieren
+## Task 6.2 ✅ – Technische Speicherung der Einzahlung definieren
 **Ziel:** Klarheit, wie die Einzahlung in Transactions persistiert wird.
 
 **MVP-Vorschlag:**
@@ -408,7 +408,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 # Phase 7 – Kategorienbereich (Zweispaltig)
 
-## Task 7.1 – Linke Kategoriespalte bauen
+## Task 7.1 ✅ – Linke Kategoriespalte bauen
 **Ziel:** Aktuellen Monatsstatus je Kategorie kompakt darstellen.
 
 **Darstellung pro Kategorie:**
@@ -425,7 +425,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 7.2 – Rechte Statistik-Spalte bauen
+## Task 7.2 ✅ – Rechte Statistik-Spalte bauen
 **Ziel:** Historische Budget-/Verlaufssicht ergänzen.
 
 **Verhalten:**
@@ -439,7 +439,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 7.3 – „Alle Kategorien anzeigen“-Verhalten definieren
+## Task 7.3 ✅ – „Alle Kategorien anzeigen“-Verhalten definieren
 **Ziel:** Top-Kategorien standardmäßig kompakt halten, Rest auf Wunsch sichtbar machen.
 
 **DoD:**
@@ -451,7 +451,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 # Phase 8 – Accordion und Detailtabellen
 
-## Task 8.1 – Accordion-Struktur ergänzen
+## Task 8.1 ✅ – Accordion-Struktur ergänzen
 **Ziel:** Detailebene sauber unterbringen, ohne Standardansicht zu überladen.
 
 **Empfohlene Positionen:**
@@ -464,7 +464,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 8.2 – Detailtabelle „Contribution Breakdown“ umsetzen
+## Task 8.2 ✅ – Detailtabelle „Contribution Breakdown“ umsetzen
 **Ziel:** Nachvollziehbar machen, aus welchen Bausteinen sich der Sollwert je Mitglied zusammensetzt.
 
 **Typische Spalten:**
@@ -482,7 +482,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 8.3 – Detailtabelle „Income Basis“ umsetzen
+## Task 8.3 ✅ – Detailtabelle „Income Basis“ umsetzen
 **Ziel:** Prorata-Berechnung transparent machen.
 
 **Typische Spalten:**
@@ -497,7 +497,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 8.4 – Detailtabelle „Kategorie-Details“ definieren
+## Task 8.4 ✅ – Detailtabelle „Kategorie-Details“ definieren
 **Ziel:** Detailliertere Kategorie-Infos aufklappbar machen.
 
 **Mögliche Inhalte:**
@@ -515,7 +515,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 # Phase 9 – Bereich „Beitragslogik“
 
-## Task 9.1 – Erklärblock Monatsbedarf
+## Task 9.1 ✅ – Erklärblock Monatsbedarf
 **Ziel:** Zeigen, wie der Monatsbedarf entsteht.
 
 **Inhalte:**
@@ -530,7 +530,7 @@ Der Sollwert ist kein einzelner Budgetwert, sondern das Ergebnis mehrerer aktive
 
 ---
 
-## Task 9.2 – Aktive Beitragsbausteine als Liste/Karten darstellen
+## Task 9.2 ✅ – Aktive Beitragsbausteine als Liste/Karten darstellen
 **Ziel:** Mehrere gleichzeitig aktive Beitragsbausteine transparent darstellen.
 
 **Wichtig:**
@@ -546,7 +546,7 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 
 ---
 
-## Task 9.3 – Einkommensbasis nur kontextbezogen anzeigen
+## Task 9.3 ✅ – Einkommensbasis nur kontextbezogen anzeigen
 **Ziel:** ProRata-Berechnung erklären, ohne unnötig technische UI zu zeigen.
 
 **Regel:**
@@ -560,7 +560,7 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 
 # Phase 10 – Zustände und Edge Cases
 
-## Task 10.1 – Loading / Empty / Error States
+## Task 10.1 ✅ – Loading / Empty / Error States
 **Ziel:** Monat-Seite fühlt sich robust an.
 
 **Fälle:**
@@ -577,7 +577,7 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 
 ---
 
-## Task 10.2 – Null-/Anfangszustände definieren
+## Task 10.2 ✅ – Null-/Anfangszustände definieren
 **Ziel:** Neue oder unvollständig eingerichtete Accounts sauber behandeln.
 
 **Wichtig bei MVP:**
@@ -593,13 +593,13 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 
 # Phase 11 – UI/UX-Polish und Responsive
 
-## Task 11.1 – Responsive Verhalten definieren
+## Task 11.1 ✅ – Responsive Verhalten definieren
 **Ziel:** Desktop zuerst, mobil mitdenken.
 
 **Empfohlen:**
 - KPI-Leiste stacked
 - Member-Cards untereinander
-- Kategorien zweispaltig -> mobil untereinander
+- Kategorien zweispaltig → mobil untereinander
 - Accordion bleibt erhalten
 
 **DoD:**
@@ -608,7 +608,7 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 
 ---
 
-## Task 11.2 – Visuelle Semantik finalisieren
+## Task 11.2 ✅ – Visuelle Semantik finalisieren
 **Ziel:** Farbe und Status nicht beliebig verwenden.
 
 **Semantische Richtung:**
@@ -625,7 +625,7 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 
 # Phase 12 – QA / Fachliche Verifikation
 
-## Task 12.1 – Zahlenkonsistenz prüfen
+## Task 12.1 ✅ – Zahlenkonsistenz prüfen
 **Ziel:** Sicherstellen, dass alle sichtbaren Zahlen zusammenpassen.
 
 **Prüfpunkte:**
@@ -640,7 +640,7 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 
 ---
 
-## Task 12.2 – Referenzfälle testen
+## Task 12.2 ✅ – Referenzfälle testen
 **Ziel:** Reale Haushaltsfälle gegen die Seite prüfen.
 
 **Empfohlene Testfälle:**
@@ -705,10 +705,9 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 9. Fehlende Daten müssen sichtbar als fehlende Grundlage kommuniziert werden.
 10. Die Seite muss für neue Entwickler auch ohne Projektwissen verständlich umsetzbar sein.
 
-
 ---
 
-# 🔧 ERWEITERUNG – Backend ReadModel & Monatsanker (nachträglich ergänzt)
+# ERWEITERUNG – Backend ReadModel & Monatsanker (nachträglich ergänzt)
 
 ## Ergänzung A – Backend ReadModel als Pflichtbestandteil
 
@@ -717,48 +716,3 @@ Nicht als „eine aktive Rule“, sondern als mehrere Bausteine:
 > Tasks 2.3–2.5 sind in **Baustein 0** (Tasks 0.1 und 0.2) vollständig abgedeckt und wurden dort konsolidiert.
 
 ---
-
-## Ergänzung B – Externer Monatsparameter und interne Normalisierung
-
-### Neue Regel
-
-Alle Monatsberechnungen basieren auf:
-
-month: YYYY-MM
-
-Intern darf dieser Wert auf einen Monatsanker normalisiert werden.
-
----
-
-### Task 3.6 – Monatsanker-basierte Filterung implementieren
-
-Alle Daten müssen anhand des ausgewählten Monats gefiltert werden:
-
-- Transactions → liegen im Monat
-- Budgets → gültig im Monat
-- ContributionRules → aktiv im Monat
-- Incomes → gültig im Monat
-
----
-
-### Wichtige Regel
-
-Extern wird im MVP `YYYY-MM` verwendet; intern darf auf einen Monatsanker normalisiert werden.
-
-Pending zählt im MVP mit, die Architektur soll aber einen späteren Pending-Switch vorbereiten.
-
-Private Vorleistungen sind im ReadModel getrennt von normalen Mitgliedseinzahlungen zu führen.
-
----
-
-## Ergänzung C – Architekturregel
-
-Frontend:
-- zeigt Daten
-- triggert Requests
-
-Backend:
-- berechnet
-- aggregiert
-- liefert fertiges ReadModel
-
