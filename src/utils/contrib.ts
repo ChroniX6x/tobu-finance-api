@@ -27,6 +27,41 @@ export function incomeWeights(
   return vals.map((x) => ({ memberId: x.memberId, weight: x.v / sum }));
 }
 
+/**
+ * Distributes `amountMinor` cents across members using the largest-remainder
+ * (Hamilton) method, ensuring sum(result) === amountMinor exactly.
+ * This prevents rounding drift (e.g. 10001 / 3 = 3334+3334+3334 = 10002 with
+ * naive Math.round) which would cause KPI totals to silently diverge.
+ */
+function largestRemainder(
+  amountMinor: number,
+  weights: { memberId: string; weight: number }[]
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!amountMinor || !weights.length) return out;
+
+  let distributed = 0;
+  const parts = weights.map((w) => {
+    const exact = amountMinor * w.weight;
+    const floor = Math.floor(exact);
+    distributed += floor;
+    return { memberId: w.memberId, floor, frac: exact - floor };
+  });
+
+  // Assign floor values
+  for (const p of parts) out[p.memberId] = (out[p.memberId] ?? 0) + p.floor;
+
+  // Distribute remaining cents to members with the largest fractional parts
+  let remaining = amountMinor - distributed;
+  const sorted = [...parts].sort((a, b) => b.frac - a.frac);
+  for (let i = 0; remaining > 0; i++, remaining--) {
+    const s = sorted[i % sorted.length];
+    if (s) out[s.memberId] = (out[s.memberId] ?? 0) + 1;
+  }
+
+  return out;
+}
+
 export function distribute(
   amountMinor: number,
   dist: Dist,
@@ -40,17 +75,20 @@ export function distribute(
     out[dist.memberId] = (out[dist.memberId] ?? 0) + amountMinor;
     return out;
   }
+
   if (dist.mode === "customSplit") {
-    for (const s of normalizeCustomSplit(dist.customSplit || [])) {
-      out[s.memberId] = (out[s.memberId] ?? 0) + Math.round(amountMinor * s.weight);
-    }
+    const weights = normalizeCustomSplit(dist.customSplit || []);
+    const partial = largestRemainder(amountMinor, weights);
+    for (const [k, v] of Object.entries(partial)) out[k] = (out[k] ?? 0) + v;
     return out;
   }
-  const map: Record<string, number> = {};
-  for (const w of incomeW) map[w.memberId] = w.weight;
-  for (const id of members) {
-    const w = map[id] ?? 0;
-    out[id] = (out[id] ?? 0) + Math.round(amountMinor * w);
-  }
+
+  // proRataIncome: use income weights
+  const weights = members.map((id) => ({
+    memberId: id,
+    weight: incomeW.find((w) => w.memberId === id)?.weight ?? 0,
+  }));
+  const partial = largestRemainder(amountMinor, weights);
+  for (const [k, v] of Object.entries(partial)) out[k] = (out[k] ?? 0) + v;
   return out;
 }

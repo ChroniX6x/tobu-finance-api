@@ -19,6 +19,18 @@
       "label": "start:dev",
       "dependsOn": ["mongod", "dev"],
       "dependsOrder": "parallel"
+    },
+    {
+      "label": "dev:debug",
+      "type": "shell",
+      "command": "npm run dev:debug",
+      "presentation": { "panel": "new", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "start:dev:debug",
+      "dependsOn": ["mongod", "dev:debug"],
+      "dependsOrder": "parallel"
     }
   ]
 }

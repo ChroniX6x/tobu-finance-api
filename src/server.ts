@@ -30,6 +30,7 @@ import budgets from "./routes/category-budgets";
 import docsRouter from "./docs/swagger";
 import accountsSummaryRouter from "./routes/accounts-summary";
 import accountOverviewRouter from "./routes/account-overview";
+import monthViewRouter from "./routes/month-view";
 
 // --- Umzug-Logger ---
 const umzugLogger = {
@@ -80,6 +81,7 @@ async function bootstrap() {
   // Wichtig: Spezifische account-Routen VOR dem generischen Router!
   app.use("/api/accounts", accountsSummaryRouter);
   app.use("/api/accounts", accountOverviewRouter);
+  app.use("/api/accounts", monthViewRouter);
   app.use("/api/accounts", accounts);
 
   app.use("/api/categories", categories);
