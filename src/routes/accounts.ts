@@ -27,7 +27,9 @@ const r = Router();
 
 const monthToRange = (m: string) => {
   // inclusive start (1st of month 00:00Z), exclusive end (1st of next month 00:00Z)
-  const [y, mo] = m.split("-").map(Number);
+  const parts = m.split("-").map(Number);
+  const y = parts[0] ?? 2000;
+  const mo = parts[1] ?? 1;
   const start = new Date(Date.UTC(y, mo - 1, 1, 0, 0, 0, 0));
   const end = new Date(Date.UTC(mo === 12 ? y + 1 : y, mo === 12 ? 0 : mo, 1, 0, 0, 0, 0));
   return { start, end };
@@ -53,7 +55,7 @@ r.get("/:id", async (req, res) => {
 
 /** GET /api/accounts/:id/expanded?include=...&from=YYYY-MM&to=YYYY-MM&status=booked|pending */
 r.get("/:id/expanded", validateQuery(QueryAccountExpanded), async (req, res) => {
-  const { id } = req.params;
+  const id = req.params["id"] ?? "";
   if (!/^[a-f\d]{24}$/i.test(id)) return res.status(400).json({ error: "INVALID_ID" });
   const inc: string[] = ((req as any).q?.include ?? []) as string[];
   const from: string | undefined = (req as any).q?.from;
@@ -199,9 +201,10 @@ r.post("/:id/members", validateBody(AddMemberToAccount), async (req, res) => {
   const mId = new Types.ObjectId(memberId);
   const acc = await Account.findById(id);
   if (!acc) return res.sendStatus(404);
-  const idx = acc.members.findIndex((x: any) => String(x.memberId) === String(mId));
-  if (idx >= 0) acc.members[idx].role = role ?? acc.members[idx].role ?? "member";
-  else acc.members.push({ memberId: mId, role: role ?? "member" });
+  const idx = acc.members.findIndex((x) => String(x.memberId) === String(mId));
+  const member = acc.members[idx];
+  if (idx >= 0 && member) member.role = (role ?? member.role ?? "member") as "owner" | "member";
+  else acc.members.push({ memberId: mId, role: (role ?? "member") as "owner" | "member" });
   await acc.save();
 
   await Event.create({
