@@ -1180,3 +1180,79 @@ Die Stammdaten-Page ist eine gemeinsame Verwaltungsseite für Account, Settings,
 
 Für den MVP wird eine Page mit klar getrennten Bereichen umgesetzt. Desktop nutzt eine Sticky-Sekundärnavigation, mobile Darstellung nutzt Accordions. Add/Edit erfolgt über Sidebars. Usage-Infos und Blockierlogik werden serverseitig über ein dediziertes Master-Data-ReadModel geliefert.
 
+---
+
+# 21. Implementierungshinweise
+
+Dieser Abschnitt dokumentiert konkrete technische Punkte, die bei der Umsetzung zu beachten sind. Sie ergeben sich aus dem Abgleich dieses Konzepts mit den bestehenden Codestrukturen von `tobu-finance` und `tobu-finance-api`.
+
+---
+
+## 21.1 Backend-Hinweise
+
+### 21.1.1 Guards müssen in CRUD-Endpunkte, nicht nur im ReadModel
+
+Das `canDelete`- und `canRemoveFromAccount`-Flag im ReadModel schützt nur die UI. Wer direkt gegen die API geht, kann aktuell beliebig löschen oder Member entfernen. Die Blockierlogik muss deshalb **auch serverseitig in den Schreibendpunkten** vorhanden sein:
+
+- `DELETE /api/accounts/:id/members/:memberId` → Last-Owner-Check, Referenz-Check
+- `DELETE /api/categories/:id` → Referenz-Check auf Transactions/Budgets/Recurrences
+- `PATCH /api/accounts/:id` mit neuem `members`-Array → Last-Owner nicht entfernbar, last Owner nicht auf `member` herabstufbar
+
+Das Konzept verwendet das ReadModel-Flag nie als einzige Absicherung. Beide Ebenen (ReadModel + CRUD-Guard) sind erforderlich.
+
+### 21.1.2 Account-Settings-Validierungsschema muss erweitert werden
+
+Das bestehende Zod-Schema in `src/validation/accounts.ts` kennt unter `settings` nur `monthGranularity`. Die im Account-Bereich (Abschnitt 7.2) genannten Felder fehlen im Validierungsschema vollständig:
+
+- `settings.dashboard.historyMonths`
+- `settings.dashboard.topKCategories`
+- `settings.alerts.lowBalanceForecastMinor`
+- `settings.alerts.carryoverLargeMinor`
+- `settings.alerts.stalenessDays`
+
+Ein `PATCH /api/accounts/:id` mit diesen Feldern würde ohne Validierungsfehler durchgehen. Das Schema muss vor oder parallel zur Account-Settings-UI vollständig definiert werden.
+
+### 21.1.3 `POST /api/accounts/:id/members` hat keine Zod-Validierung
+
+Diese Route greift direkt auf `req.body` zu, ohne `validateBody(...)` zu verwenden. Alle anderen Routen in `accounts.ts` nutzen Middleware-Validierung. Beim Implementieren des Member-Hinzufügen-Flows (Abschnitt 8.7) muss ein Schema für `memberId` und `role` ergänzt werden.
+
+### 21.1.4 Globaler `DELETE /api/members/:id` ist unkontrolliert
+
+Das Konzept sieht nur „Aus Account entfernen" via `DELETE /api/accounts/:id/members/:memberId` vor. Der globale `DELETE /api/members/:id`-Endpunkt löscht direkt aus der Members-Collection ohne jede Referenzprüfung (Transactions, ContributionRules, MemberIncomes, Categories). Im Stammdaten-Flow ist dieser Endpunkt nicht vorgesehen. Sicherstellen, dass die UI **ausschließlich** den Account-Members-Endpunkt nutzt und nie den globalen Member-Delete.
+
+---
+
+## 21.2 Frontend-Hinweise
+
+### 21.2.1 `manage`-Route und State-Bereitstellung
+
+Die Route `/accounts/:accountId/manage/master-data` erfordert ein `manage`-Lazy-Loading-Segment als Child unter dem `:accountId`-Level in `accounts.routes.ts`. Wichtig dabei:
+
+- Der `MasterDataPageState` darf **nicht** am `:accountId`-Root-Level registriert werden, sondern am `manage`-Route-Level via `provideStates([MasterDataPageState])` in der `manage`-Routes-Konfiguration.
+- Der bestehende `AccountOverviewState` bleibt auf dem `:accountId`-Level. Die Grenze muss sauber gezogen werden, um ungewolltes State-Sharing zu vermeiden.
+
+### 21.2.2 `AccountModel` nicht mit neuen Master-Data-Interfaces mischen
+
+Das bestehende `AccountModel`-Interface in `src/app/shared/models/account.model.ts` ist ein Legacy-Frontend-Aggregat mit Feldern wie `balances`, `monthlyIncomes`, `monthlyPlannedContributions`. Es entspricht nicht dem tatsächlichen API-Response. Das neue `AccountMasterDataResponse`-ViewModel (Abschnitt 10.3) muss in einem **eigenen File** im Feature-Ordner definiert werden und darf nie auf das bestehende `AccountModel` verweisen oder es erweitern.
+
+### 21.2.3 `CategoryModel.customSplit` hat einen inkonsistenten Union-Typ
+
+Das bestehende `CategoryModel`-Interface deklariert `customSplit` als `{ [memberId: string]: number } | { memberId: string, split: number }[]`. Die API gibt ausschließlich das Array-Format zurück. Der neue `CategoryMasterItemVm` (Abschnitt 10.3) ist korrekt als Array typisiert. Sicherstellen, dass kein Consumer-Code zwischen `custom-split-editor.component.ts` und den bestehenden Services das Map-Format annimmt.
+
+### 21.2.4 `MembersDataService.getMembersWithIds` – bestehender Bug
+
+`getMembersWithIds` in `member-data.service.ts` baut `?id=x&id=y`-Queries, die `GET /api/members` nicht unterstützt (nur `?userId=...`). Diese Methode ist für den Master-Data-Flow nicht relevant, da Members aus dem `master-data`-ReadModel kommen. Beim Testen kann der Bug aber zu Verwirrung führen. Beim Member-Add-Flow (`POST /api/members` + `POST /api/accounts/:id/members`, Abschnitt 8.7) **nicht** auf `getMembersWithIds` zurückgreifen, sondern danach `ReloadMasterData()` ausführen.
+
+### 21.2.5 `customSplit`-Toggle: leeres Array ≠ kein Split aktiv
+
+Wenn der Toggle „Eigene Verteilung verwenden" aktiv ist, aber alle Einträge gelöscht wurden, ist `customSplit: []` zwar fachlich leer, aber das Backend würde einen `customSplit`-Summencheck nicht auslösen (leeres Array → keine Summe). Die UI-Validierung (Abschnitt 9.8.3) muss deshalb zwischen zwei Zuständen unterscheiden:
+
+- Toggle **inaktiv** → `customSplit` wird als `[]` gespeichert, keine Summenvalidierung nötig
+- Toggle **aktiv** → mindestens ein Eintrag erforderlich AND Summe muss exakt 100 ergeben, sonst Speichern blockieren
+
+Dieser Unterschied muss explizit im State-Modell des `custom-split-editor.component.ts` abgebildet werden.
+
+### 21.2.6 `hasSingleMemberInfo` im `MasterDataMetaVm` ist redundant
+
+`MasterDataMetaVm.hasSingleMemberInfo` lässt sich vollständig aus `AccountMasterVm.memberCount === 1` ableiten. Der Client braucht das Flag nicht separat. Es kann dennoch vom Backend geliefert werden, sollte aber im Frontend nicht für eigene Logik verwendet werden – stattdessen direkt `memberCount` auswerten.
+
