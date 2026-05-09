@@ -19,6 +19,7 @@
                 "NODE_NO_WARNINGS": "1"
             },
             "cwd": "${workspaceFolder}",
+            "outFiles": [],
             "sourceMaps": true,
             "resolveSourceMapLocations": [
                 "${workspaceFolder}/**",

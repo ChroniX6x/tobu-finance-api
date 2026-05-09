@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { Types } from "mongoose";
 import Category from "../models/Category.js";
+import Transaction from "../models/Transaction.js";
+import CategoryBudget from "../models/CategoryBudget.js";
+import Recurrence from "../models/Recurrence.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
 import { QueryCategories, CreateCategory, UpdateCategory } from "../validation/categories.js";
 
@@ -50,7 +53,28 @@ r.patch("/:id", validateBody(UpdateCategory), async (req, res) => {
 
 /** DELETE /api/categories/:id */
 r.delete("/:id", async (req, res) => {
-  const ok = await Category.findByIdAndDelete(req.params.id);
+  const { id } = req.params;
+  if (!/^[a-f\d]{24}$/i.test(id)) return res.status(400).json({ error: "INVALID_ID" });
+
+  const catId = new Types.ObjectId(id);
+
+  // Guard: category still referenced
+  const [txRef, budgetRef, recRef] = await Promise.all([
+    Transaction.exists({ categoryId: catId }),
+    CategoryBudget.exists({ categoryId: catId }),
+    Recurrence.exists({ categoryId: catId }),
+  ]);
+
+  const blockers: string[] = [];
+  if (txRef) blockers.push("Wird in Buchungen verwendet");
+  if (budgetRef) blockers.push("Hat ein aktives Budget");
+  if (recRef) blockers.push("Wird in Wiederkehrer verwendet");
+
+  if (blockers.length > 0) {
+    return res.status(409).json({ error: "CATEGORY_REFERENCED", usageHints: blockers });
+  }
+
+  const ok = await Category.findByIdAndDelete(id);
   if (!ok) return res.sendStatus(404);
   res.sendStatus(204);
 });

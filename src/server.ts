@@ -31,6 +31,7 @@ import docsRouter from "./docs/swagger";
 import accountsSummaryRouter from "./routes/accounts-summary";
 import accountOverviewRouter from "./routes/account-overview";
 import monthViewRouter from "./routes/month-view";
+import masterDataRouter from "./routes/master-data";
 
 // --- Umzug-Logger ---
 const umzugLogger = {
@@ -82,6 +83,7 @@ async function bootstrap() {
   app.use("/api/accounts", accountsSummaryRouter);
   app.use("/api/accounts", accountOverviewRouter);
   app.use("/api/accounts", monthViewRouter);
+  app.use("/api/accounts", masterDataRouter);
   app.use("/api/accounts", accounts);
 
   app.use("/api/categories", categories);

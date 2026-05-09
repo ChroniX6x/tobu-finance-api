@@ -12,8 +12,26 @@ export const AccountMember = z.object({
   role: z.enum(["owner", "member"]).optional(),
 });
 
+const AlertsSettings = z.object({
+  lowBalanceForecastMinor: z.number().min(0).nullable().optional(),
+  carryoverLargeMinor: z.number().min(0).nullable().optional(),
+  stalenessDays: z.number().int().positive().nullable().optional(),
+});
+
+const DashboardSettings = z.object({
+  historyMonths: z.number().int().min(3).max(24).optional(),
+  topKCategories: z.number().int().min(1).max(10).optional(),
+});
+
 export const AccountSettings = z.object({
   monthGranularity: z.literal("YYYY-MM").optional(),
+  dashboard: DashboardSettings.optional(),
+  alerts: AlertsSettings.optional(),
+});
+
+export const AddMemberToAccount = z.object({
+  memberId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid ObjectId"),
+  role: z.enum(["owner", "member"]),
 });
 
 export const CreateAccount = z.object({
