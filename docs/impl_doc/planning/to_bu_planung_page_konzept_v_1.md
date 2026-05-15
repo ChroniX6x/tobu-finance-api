@@ -49,6 +49,8 @@ Begründung:
 
 Die Stammdaten-Page liefert die Grundobjekte. Die Planung-Page nutzt diese Grundobjekte, um daraus die monatliche Berechnungsbasis zu bilden.
 
+> **Änderungsbedarf an bestehender Seite:** Die Stammdaten-Page ist bereits implementiert. Im Zuge der Planning-Implementierung muss die Stammdaten-Page um einen „In Planung bearbeiten"-Link je Kategorie ergänzt werden, der auf `/accounts/:accountId/planning` verweist. Diese Änderung ist Teil des Planning-Scopes.
+
 ---
 
 ## 3. Fachliche Rolle der Planung-Page
@@ -704,6 +706,10 @@ Grund:
 - Client-seitige Berechnung von aktiven Budgets, ProRata-Berechenbarkeit und Rule-Konflikten wäre fehleranfällig.
 - Die Month View basiert ebenfalls auf serverseitiger Berechnung; Planung und Month View müssen konsistent bleiben.
 
+Implementierungshinweis:
+
+> Das Planning-ReadModel **muss** `src/utils/contrib.ts` für alle ProRata- und Verteilungsberechnungen wiederverwenden. Diese Utility wird bereits von `month-view.ts` genutzt und ist die einzige zentrale ProRata-Logik im Backend. Eine eigene Berechnung im Planning-Route würde zu Abweichungen führen.
+
 ## 14.2 Endpunkt
 
 ```text
@@ -921,8 +927,10 @@ Kein optimistisches Speichern im MVP.
 
 # 16. Komponentenstruktur
 
+> **Hinweis zur Ordnerstruktur:** Die bestehende Frontend-Codebasis verwendet `src/app/accounts/` als Wurzel. Es gibt keinen `features/`-Ordner. Alle Pfadangaben folgen dieser bestehenden Struktur.
+
 ```text
-features/accounts/account-management/planning/
+accounts/account-management/planning/
 ├── planning-page.component.ts
 ├── planning-overview-section.component.ts
 ├── budget-planning-section.component.ts
@@ -940,7 +948,7 @@ features/accounts/account-management/planning/
 Optional:
 
 ```text
-features/accounts/account-management/planning/state/
+accounts/account-management/planning/state/
 ├── planning.actions.ts
 ├── planning.state.ts
 └── planning.selectors.ts
