@@ -5,13 +5,12 @@ import { DateTime } from "luxon";
 import MemberIncome from "../models/MemberIncome.js";
 import Event from "../models/Event.js";
 import { toMonthDate } from "../lib/month.js";
-
-// Falls vorhanden, Validierung anhängen
 import { validateBody } from "../middleware/validate.js";
 import {
   CreateMemberIncome,
   UpdateMemberIncome,
 } from "../validation/member-incomes.js";
+import { monthRangesOverlap } from "../utils/month-overlap.js";
 
 const r = Router();
 
@@ -37,12 +36,35 @@ r.post("/", validateBody(CreateMemberIncome), async (req, res) => {
     };
   }).data;
 
+  const newFrom = b.fromMonth ? toMonthDate(b.fromMonth) : null;
+  const newTo = b.toMonth ? toMonthDate(b.toMonth) : null;
+
+  // Overlap check: no two incomes for the same member+account may overlap in time
+  const siblings = await MemberIncome.find({
+    accountId: new Types.ObjectId(b.accountId),
+    memberId: new Types.ObjectId(b.memberId),
+  }).lean();
+
+  for (const s of siblings) {
+    if (
+      monthRangesOverlap(
+        { fromMonth: newFrom, toMonth: newTo },
+        { fromMonth: (s.fromMonth as unknown as Date | null), toMonth: (s.toMonth as unknown as Date | null) }
+      )
+    ) {
+      return res.status(409).json({
+        code: "INCOME_OVERLAP",
+        message: "An income entry for this member already covers the given time range.",
+      });
+    }
+  }
+
   const doc: Record<string, unknown> = {
     accountId: new Types.ObjectId(b.accountId),
     memberId: new Types.ObjectId(b.memberId),
     amountMinor: b.amountMinor,
-    fromMonth: b.fromMonth ? toMonthDate(b.fromMonth) : null,
-    toMonth: b.toMonth ? toMonthDate(b.toMonth) : null,
+    fromMonth: newFrom,
+    toMonth: newTo,
   };
 
   const created = await MemberIncome.create(doc);
@@ -70,10 +92,39 @@ r.patch("/:id", validateBody(UpdateMemberIncome), async (req, res) => {
   const existing = await MemberIncome.findById(id);
   if (!existing) return res.sendStatus(404);
 
+  // Resolve effective new range
+  const newFrom = u.fromMonth !== undefined
+    ? (u.fromMonth ? toMonthDate(u.fromMonth) : null)
+    : (existing.fromMonth as unknown as Date | null);
+  const newTo = u.toMonth !== undefined
+    ? (u.toMonth ? toMonthDate(u.toMonth) : null)
+    : (existing.toMonth as unknown as Date | null);
+
+  // Overlap check (exclude self)
+  const siblings = await MemberIncome.find({
+    accountId: existing.accountId,
+    memberId: existing.memberId,
+    _id: { $ne: existing._id },
+  }).lean();
+
+  for (const s of siblings) {
+    if (
+      monthRangesOverlap(
+        { fromMonth: newFrom, toMonth: newTo },
+        { fromMonth: (s.fromMonth as unknown as Date | null), toMonth: (s.toMonth as unknown as Date | null) }
+      )
+    ) {
+      return res.status(409).json({
+        code: "INCOME_OVERLAP",
+        message: "The updated time range overlaps with another income entry for the same member.",
+      });
+    }
+  }
+
   const patch: Record<string, unknown> = {};
   if (typeof u.amountMinor === "number") patch.amountMinor = u.amountMinor;
-  if (u.fromMonth !== undefined) patch.fromMonth = u.fromMonth ? toMonthDate(u.fromMonth) : null;
-  if (u.toMonth !== undefined) patch.toMonth = u.toMonth ? toMonthDate(u.toMonth) : null;
+  if (u.fromMonth !== undefined) patch.fromMonth = newFrom;
+  if (u.toMonth !== undefined) patch.toMonth = newTo;
 
   const updated = await MemberIncome.findByIdAndUpdate(id, patch, { new: true });
   if (!updated) return res.sendStatus(404);

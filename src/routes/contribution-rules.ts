@@ -31,7 +31,9 @@ r.post("/", validateBody(CreateContributionRule), async (req, res) => {
   const b = (req as unknown as {
     data: {
       accountId: string;
-      type: "base" | "additional" | "topup";
+      type: "additional" | "topup";
+      recurring: boolean;
+      description?: string | null;
       amountMinor: number;
       distribution: unknown;
       fromMonth?: string | null;
@@ -43,6 +45,8 @@ r.post("/", validateBody(CreateContributionRule), async (req, res) => {
   const doc: Record<string, unknown> = {
     accountId: new Types.ObjectId(b.accountId),
     type: b.type,
+    recurring: b.recurring,
+    description: b.description ?? null,
     amountMinor: b.amountMinor,
     distribution: b.distribution,
     fromMonth: b.fromMonth ? toMonthDate(b.fromMonth) : null,
@@ -68,7 +72,8 @@ r.patch("/:id", validateBody(UpdateContributionRule), async (req, res) => {
   const { id } = req.params;
   const u = (req as unknown as {
     data: Partial<{
-      type: "base" | "additional" | "topup";
+      recurring: boolean;
+      description: string | null;
       amountMinor: number;
       distribution: unknown;
       fromMonth: string | null;
@@ -80,8 +85,14 @@ r.patch("/:id", validateBody(UpdateContributionRule), async (req, res) => {
   const existing = await ContributionRule.findById(id);
   if (!existing) return res.sendStatus(404);
 
+  // base rules are auto-generated – block manual modification
+  if ((existing as unknown as { type: string }).type === "base") {
+    return res.status(403).json({ code: "BASE_RULE_IMMUTABLE", message: "Base rules are auto-generated and cannot be modified." });
+  }
+
   const patch: Record<string, unknown> = {};
-  if (u.type) patch.type = u.type;
+  if (typeof u.recurring === "boolean") patch.recurring = u.recurring;
+  if (u.description !== undefined) patch.description = u.description;
   if (typeof u.amountMinor === "number") patch.amountMinor = u.amountMinor;
   if (u.distribution !== undefined) patch.distribution = u.distribution;
   if (u.fromMonth !== undefined) patch.fromMonth = u.fromMonth ? toMonthDate(u.fromMonth) : null;
@@ -110,9 +121,13 @@ r.patch("/:id", validateBody(UpdateContributionRule), async (req, res) => {
 r.delete("/:id", async (req, res) => {
   const { id } = req.params;
 
-  // Vor dem Löschen laden (für Event-Parameter)
   const existing = await ContributionRule.findById(id);
   if (!existing) return res.sendStatus(404);
+
+  // base rules are auto-generated – block manual deletion
+  if ((existing as unknown as { type: string }).type === "base") {
+    return res.status(403).json({ code: "BASE_RULE_IMMUTABLE", message: "Base rules are auto-generated and cannot be deleted." });
+  }
 
   await ContributionRule.deleteOne({ _id: id });
 

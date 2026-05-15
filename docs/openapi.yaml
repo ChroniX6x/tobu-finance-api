@@ -631,6 +631,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MemberIncome' }
+        '409':
+          description: Income time range overlaps with an existing income for this member
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: INCOME_OVERLAP }
+                  message: { type: string }
 
   /api/member-incomes/{id}:
     parameters:
@@ -648,6 +657,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MemberIncome' }
+        '409':
+          description: Income time range overlaps with an existing income for this member
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: INCOME_OVERLAP }
+                  message: { type: string }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       summary: Delete member income
@@ -704,11 +722,29 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ContributionRule' }
+        '403':
+          description: Base rules cannot be modified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: BASE_RULE_IMMUTABLE }
+                  message: { type: string }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       summary: Delete contribution rule
       responses:
         '204': { description: Deleted }
+        '403':
+          description: Base rules cannot be modified or deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: BASE_RULE_IMMUTABLE }
+                  message: { type: string }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /api/carryovers:
@@ -839,6 +875,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CategoryBudget' }
+        '409':
+          description: Budget time range overlaps with an existing budget for this category
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: BUDGET_OVERLAP }
+                  message: { type: string }
 
   /api/category-budgets/{id}:
     parameters:
@@ -856,6 +901,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CategoryBudget' }
+        '409':
+          description: Budget time range overlaps with an existing budget for this category
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: BUDGET_OVERLAP }
+                  message: { type: string }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       summary: Delete category budget
@@ -906,6 +960,81 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AccountOverview'
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/accounts/{accountId}/planning:
+    parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/ObjectId' }
+    get:
+      summary: Planning read-model
+      description: |
+        Returns a fully-calculated planning read-model for an account:
+        - Overview KPIs (active budget sum, contribution block count, proRata status)
+        - All category budgets with active/overlap status
+        - Per-member income with active entry and history
+        - Contribution blocks (base + additional) active in the reference month
+        - Special blocks (topup) active in the reference month
+        - Preview of planned member dues for the reference month
+        - Planning hints (missing income, budget conflicts, etc.)
+        Defaults to the current calendar month when `month` is omitted.
+      tags: [Accounts]
+      parameters:
+        - in: query
+          name: month
+          required: false
+          description: Reference month in YYYY-MM format. Defaults to current month.
+          schema:
+            $ref: '#/components/schemas/Month'
+      responses:
+        '200':
+          description: Planning read-model
+          content:
+            application/json:
+              schema:
+                type: object
+                description: AccountPlanningResponse
+        '400':
+          description: Invalid account ID or month format
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/accounts/{accountId}/planning:
+    parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/ObjectId' }
+    get:
+      summary: Planning read-model
+      description: |
+        Returns a fully-calculated planning read-model for an account:
+        - Overview KPIs (active budget sum, contribution block count, proRata status)
+        - All category budgets with active/overlap status
+        - Per-member income with active entry and history
+        - Contribution blocks (base + additional) active in the reference month
+        - Special blocks (topup) active in the reference month
+        - Preview of planned member dues for the reference month
+        - Planning hints (missing income, budget conflicts, etc.)
+        Defaults to the current calendar month when `month` is omitted.
+      tags: [Accounts]
+      parameters:
+        - in: query
+          name: month
+          required: false
+          description: Reference month in YYYY-MM format. Defaults to current month.
+          schema:
+            $ref: '#/components/schemas/Month'
+      responses:
+        '200':
+          description: Planning read-model (AccountPlanningResponse)
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid account ID or month format
         '404': { $ref: '#/components/responses/NotFound' }
 
   /api/accounts/{id}/month-view:

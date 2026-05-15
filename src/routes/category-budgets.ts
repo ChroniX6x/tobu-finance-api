@@ -5,13 +5,13 @@ import { DateTime } from "luxon";
 import CategoryBudget from "../models/CategoryBudget.js";
 import Event from "../models/Event.js";
 import { toMonthDate } from "../lib/month.js";
-
-// Falls vorhanden, Validierung anhängen
 import { validateBody } from "../middleware/validate.js";
 import {
   CreateCategoryBudget,
   UpdateCategoryBudget,
 } from "../validation/category-budgets.js";
+import { monthRangesOverlap } from "../utils/month-overlap.js";
+import { regenerateBaseRules } from "../services/contribution-rule-generator.js";
 
 const r = Router();
 
@@ -37,17 +37,37 @@ r.post("/", validateBody(CreateCategoryBudget), async (req, res) => {
     };
   }).data;
 
-  const doc: Record<string, unknown> = {
+  const newFrom = b.fromMonth ? toMonthDate(b.fromMonth) : null;
+  const newTo = b.toMonth ? toMonthDate(b.toMonth) : null;
+
+  // Overlap check: no two budgets for the same category may overlap in time
+  const siblings = await CategoryBudget.find({
+    accountId: new Types.ObjectId(b.accountId),
+    categoryId: new Types.ObjectId(b.categoryId),
+  }).lean();
+
+  for (const s of siblings) {
+    if (
+      monthRangesOverlap(
+        { fromMonth: newFrom, toMonth: newTo },
+        { fromMonth: (s.fromMonth as unknown as Date | null), toMonth: (s.toMonth as unknown as Date | null) }
+      )
+    ) {
+      return res.status(409).json({
+        code: "BUDGET_OVERLAP",
+        message: "A budget for this category already covers the given time range.",
+      });
+    }
+  }
+
+  const created = await CategoryBudget.create({
     accountId: new Types.ObjectId(b.accountId),
     categoryId: new Types.ObjectId(b.categoryId),
     amountMinor: b.amountMinor,
-    fromMonth: b.fromMonth ? toMonthDate(b.fromMonth) : null,
-    toMonth: b.toMonth ? toMonthDate(b.toMonth) : null,
-  };
+    fromMonth: newFrom,
+    toMonth: newTo,
+  });
 
-  const created = await CategoryBudget.create(doc);
-
-  // EVENT: categoryBudget.added
   await Event.create({
     accountId: new Types.ObjectId(b.accountId),
     date: DateTime.utc().toJSDate(),
@@ -55,6 +75,8 @@ r.post("/", validateBody(CreateCategoryBudget), async (req, res) => {
     params: { categoryId: b.categoryId, amountMinor: b.amountMinor },
     createdByMemberId: null,
   });
+
+  await regenerateBaseRules(b.accountId);
 
   res.status(201).json(created);
 });
@@ -70,15 +92,43 @@ r.patch("/:id", validateBody(UpdateCategoryBudget), async (req, res) => {
   const existing = await CategoryBudget.findById(id);
   if (!existing) return res.sendStatus(404);
 
+  // Resolve effective new range (fall back to existing values if not in patch)
+  const newFrom = u.fromMonth !== undefined
+    ? (u.fromMonth ? toMonthDate(u.fromMonth) : null)
+    : (existing.fromMonth as unknown as Date | null);
+  const newTo = u.toMonth !== undefined
+    ? (u.toMonth ? toMonthDate(u.toMonth) : null)
+    : (existing.toMonth as unknown as Date | null);
+
+  // Overlap check (exclude self)
+  const siblings = await CategoryBudget.find({
+    accountId: existing.accountId,
+    categoryId: existing.categoryId,
+    _id: { $ne: existing._id },
+  }).lean();
+
+  for (const s of siblings) {
+    if (
+      monthRangesOverlap(
+        { fromMonth: newFrom, toMonth: newTo },
+        { fromMonth: (s.fromMonth as unknown as Date | null), toMonth: (s.toMonth as unknown as Date | null) }
+      )
+    ) {
+      return res.status(409).json({
+        code: "BUDGET_OVERLAP",
+        message: "The updated time range overlaps with another budget for the same category.",
+      });
+    }
+  }
+
   const patch: Record<string, unknown> = {};
   if (typeof u.amountMinor === "number") patch.amountMinor = u.amountMinor;
-  if (u.fromMonth !== undefined) patch.fromMonth = u.fromMonth ? toMonthDate(u.fromMonth) : null;
-  if (u.toMonth !== undefined) patch.toMonth = u.toMonth ? toMonthDate(u.toMonth) : null;
+  if (u.fromMonth !== undefined) patch.fromMonth = newFrom;
+  if (u.toMonth !== undefined) patch.toMonth = newTo;
 
   const updated = await CategoryBudget.findByIdAndUpdate(id, patch, { new: true });
   if (!updated) return res.sendStatus(404);
 
-  // EVENT: categoryBudget.updated
   await Event.create({
     accountId: updated.accountId as unknown as Types.ObjectId,
     date: DateTime.utc().toJSDate(),
@@ -87,6 +137,8 @@ r.patch("/:id", validateBody(UpdateCategoryBudget), async (req, res) => {
     createdByMemberId: null,
   });
 
+  await regenerateBaseRules(String(updated.accountId));
+
   res.json(updated);
 });
 
@@ -94,13 +146,11 @@ r.patch("/:id", validateBody(UpdateCategoryBudget), async (req, res) => {
 r.delete("/:id", async (req, res) => {
   const { id } = req.params;
 
-  // Vor dem Löschen laden (Variablen bereitstellen!)
   const existing = await CategoryBudget.findById(id);
   if (!existing) return res.sendStatus(404);
 
   await CategoryBudget.deleteOne({ _id: id });
 
-  // EVENT: categoryBudget.removed
   await Event.create({
     accountId: existing.accountId as unknown as Types.ObjectId,
     date: DateTime.utc().toJSDate(),
@@ -108,6 +158,8 @@ r.delete("/:id", async (req, res) => {
     params: { categoryId: String(existing.categoryId) },
     createdByMemberId: null,
   });
+
+  await regenerateBaseRules(String(existing.accountId));
 
   res.sendStatus(204);
 });
