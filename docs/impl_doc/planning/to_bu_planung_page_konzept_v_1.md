@@ -1,7 +1,7 @@
-# ToBu – Planung-Page Konzept V2
+﻿# ToBu – Planung-Page Konzept V3
 
-**Stand:** 2026-05-07  
-**Status:** V2 mit aktualisierter Navigations- und Positionsentscheidung  
+**Stand:** 2026-05-15  
+**Status:** V3 – Auto-Generierung von Base-Rules, Overlap-Check, Validierungs-Fixes  
 **Ziel:** Konzept für die Planung-Page als sichtbaren Account-Hauptbereich nach Übersicht, Buchungen und Monat. Die bereits umgesetzte Stammdaten-Page bleibt im Account-verwalten-/Zahnradbereich.
 
 ---
@@ -340,6 +340,8 @@ MVP-Vereinfachung:
 
 > Es darf pro Kategorie und Monat nur ein aktives Budget geben. Überlappende Zeiträume werden serverseitig blockiert.
 
+**Implementierung (Server):** Der `POST`- und `PATCH`-Handler in `src/routes/category-budgets.ts` prüft vor dem Speichern mit `monthRangesOverlap()`, ob der Zeitraum mit einem bestehenden Budget derselben Kategorie kollidiert. Bei Überlappung: `409 BUDGET_OVERLAP`.
+
 ## 9.7 Bearbeiten eines Budgets
 
 Bearbeitbar:
@@ -359,6 +361,8 @@ Beispiel:
 Diese Änderung kann bereits angezeigte Monate rückwirkend verändern.
 ```
 
+Nach jeder Budgetänderung werden die Base-Rules des Accounts automatisch neu generiert (§11.3).
+
 ## 9.8 Löschen eines Budgets
 
 Budgets dürfen im MVP gelöscht werden, wenn keine serverseitige Regel dagegen spricht.
@@ -370,6 +374,7 @@ MVP-Regel:
 - Löschen erlaubt.
 - Confirm-Dialog erforderlich.
 - Hinweis auf rückwirkende Auswirkung.
+- Nach dem Löschen werden Base-Rules des Accounts automatisch neu generiert (§11.3).
 
 Spätere Erweiterung:
 
@@ -500,16 +505,48 @@ Für die Planung-Page gilt:
 - Explizit persistierte Regeln sind vor allem für `additional`, `topup` und Sonderkorrekturen relevant.
 - Der UI-Begriff „Beitragsbaustein“ ist verständlicher als „Contribution Rule“.
 
-## 11.3 MVP-Strategie für Base
+## 11.3 Auto-Generierung von Base-Rules
 
-Die Planung-Page soll vermeiden, Nutzer durch doppelte Base-Logik zu verwirren.
+Base-ContributionRules werden **nicht manuell angelegt**, sondern automatisch aus den Kategorie-Budgets und `category.customSplit` generiert.
 
-MVP-Festlegung:
+### Entscheidung
 
-- Kategorie-Budgets bilden den regulären Monatsbedarf.
-- Die Standardverteilung dieses Bedarfs wird über die allgemeine Beitragslogik abgebildet.
-- Kategoriespezifische CustomSplits kommen aus den Kategorien.
-- Explizite Contribution Rules in der UI werden primär als Zusatzbausteine und TopUps gepflegt.
+Kategorie-Budgets definieren den geplanten Monatsbedarf. Die zugehörigen `base`-ContributionRules beschreiben, wie dieser Bedarf auf die Mitglieder verteilt wird. Um Inkonsistenz zwischen Budgets und Base-Rules zu vermeiden, werden Base-Rules serverseitig automatisch erzeugt und synchron gehalten.
+
+### Trigger (Eager Save)
+
+Bei jedem `POST`, `PATCH` und `DELETE` auf `/api/category-budgets` wird am Ende der Route `regenerateBaseRules(accountId)` aufgerufen. Diese Funktion:
+
+1. Löscht alle `contribution_rules` des Accounts mit `type: 'base'`.
+2. Gruppiert alle Budgets des Accounts nach der Distribution ihrer Kategorie.
+3. Schreibt pro Gruppe eine neue `base`-Rule.
+
+Implementierung liegt in `src/services/contribution-rule-generator.ts`.
+
+### Gruppierungslogik
+
+Kategorien werden nach ihrem `customSplit`-Array gruppiert:
+
+- Kategorien **ohne** `customSplit` (leeres Array) → eine Rule mit `distribution.mode = 'proRataIncome'`
+- Kategorien **mit identischem** `customSplit` → eine gemeinsame Rule mit `distribution.mode = 'customSplit'`
+- Kategorien mit unterschiedlichem `customSplit` → je eine eigene Rule
+
+Zwei Kategorien gelten als identisch im Split, wenn alle `memberId`/`split`-Einträge übereinstimmen.
+
+### Schutz vor manuellem Überschreiben
+
+Da `type: 'base'` ausschließlich durch `regenerateBaseRules` vergeben wird, genügt diese Eigenschaft als Schutzkriterium. CRUD-Endpunkte (`PATCH`, `DELETE`) auf `contribution_rules` lehnen Anfragen auf Rules mit `type === 'base'` mit `403 FORBIDDEN` ab. Ein separates Flag ist nicht notwendig.
+
+### Zeitraum der generierten Rules
+
+- `fromMonth`: frühestes `fromMonth` aller Budgets der Gruppe (`null` wenn keines einen Start hat)
+- `toMonth`: `null` wenn mindestens ein Budget offen ist, sonst spätestes `toMonth` der Gruppe
+- `recurring: true`
+
+### Darstellung in der UI
+
+Generierte Base-Blöcke sind in der Planung-Page **read-only** und zeigen Summe, Distribution und einen Link "Budgets anzeigen". Änderungen erfolgen ausschließlich über die Budgets.
+
 
 Der Bereich „Beitragsregeln“ zeigt trotzdem alle aktiven Bausteine, auch abgeleitete Base-Blöcke, aber abgeleitete Blöcke sind read-only und verweisen auf Budgets/Kategorien.
 
@@ -790,7 +827,7 @@ export interface IncomePlanningMemberVm {
 ```ts
 export interface ContributionBlockVm {
   id: string;
-  source: 'derivedBudgetBase' | 'contributionRule';
+  source: 'generatedBase' | 'contributionRule';
   ruleId: string | null;
   type: 'base' | 'additional' | 'topup';
   title: string;
@@ -866,6 +903,8 @@ Schreiboperationen laufen über:
 - `DELETE /api/contribution-rules/:id`
 
 Nach Schreiboperationen wird das Planning-ReadModel neu geladen.
+
+**regenerateBaseRules:** Schreiboperationen auf `/api/category-budgets` rufen zusätzlich `regenerateBaseRules(accountId)` auf (implementiert in `src/services/contribution-rule-generator.ts`). Dieser Service synchronisiert alle `type: 'base'`-ContributionRules des Accounts mit dem aktuellen Budget-Stand.
 
 ---
 
@@ -1028,12 +1067,15 @@ Jede Planungsänderung soll nach dem Speichern in der Vorschau nachvollziehbar w
 ## 18.4 Contribution Rules
 
 - Typ erforderlich.
+- `recurring` (Boolean) erforderlich — fehlt derzeit im Zod-Schema (`CreateContributionRule`), muss gefixt werden.
+- `description` optional (nullish) — fehlt im Zod-Schema, muss ergänzt werden.
 - Betrag > 0.
 - Distribution Mode erforderlich.
 - Bei `perMember`: Member erforderlich.
 - Bei `customSplit`: Summe exakt 100 %.
 - Bei `proRataIncome`: Startmonat muss berechenbar sein.
 - Zeitraum gültig.
+- Rules mit `type: 'base'` dürfen über CRUD-Endpunkte nicht geändert oder gelöscht werden (`403 FORBIDDEN`) — da `base` ausschließlich auto-generiert ist.
 
 ---
 
