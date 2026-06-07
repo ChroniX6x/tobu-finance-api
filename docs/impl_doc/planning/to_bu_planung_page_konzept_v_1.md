@@ -1261,3 +1261,64 @@ Sie ist keine operative Monatsabrechnung wie die Month View, sondern der sichtba
 
 Für den MVP sollte die Page ein dediziertes serverseitiges Planning-ReadModel verwenden, Add/Edit über Sidebars lösen, mobile Accordions nutzen und eine kompakte Vorschau für den Referenzmonat anbieten.
 
+
+
+---
+
+# Addendum A – `categories` im Planning-ReadModel
+
+**Datum:** 2026-06-07  
+**Betrifft:** Backend `GET /api/accounts/:accountId/planning`, Frontend `AccountPlanningResponse`
+
+## Entscheidung
+
+Der Planning-ReadModel-Endpunkt liefert zusätzlich ein `categories`-Feld:
+
+```ts
+categories: Array<{ id: string; name: string | null }>;
+```
+
+Diese Liste enthält **alle Kategorien des Accounts**, unabhängig davon ob bereits Budgets für sie existieren.
+
+## Warum
+
+### Das Problem
+
+Im Budget-Editor (Baustein 4) muss der User eine Kategorie auswählen, für die er ein Budget anlegen möchte. Drei Optionen wurden evaluiert:
+
+**Option A — Dedupliziert aus `vm.budgets`**  
+Nur Kategorien mit bestehenden Budgets wären auswählbar. Das führt zu einem fundamentalen UX-Problem: Beim Erstsetup eines neuen Accounts (leere Kategorienliste in Budgets) gibt es keine Auswahlmöglichkeit — der User kommt nicht aus dem Hühnerei-und-Ei-Problem heraus.
+
+**Option B — Aus `MasterDataPageState`**  
+Der MasterData-State enthält alle Kategorien, ist aber nur nach Navigation zur Stammdaten-Page befüllt. Die Planning-Page kann sich nicht darauf verlassen — es wäre ein stiller Fehler wenn der State zufällig leer ist, ohne dass der User oder das System das bemerkt.
+
+**Option C — Direkt im Planning-ReadModel mitliefern**  
+Der Backend-Endpunkt lädt `allCategories` bereits intern (für `catNameById` in der Budget-Aggregation). Diese Daten sind also ohne zusätzlichen Datenbankzugriff verfügbar und werden lediglich nicht zurückgegeben. Das Mitliefern ist ein Einzeiler im Response-Objekt.
+
+### Warum Option C die richtige Wahl ist
+
+1. **Kein zusätzlicher API-Call**: Die Daten liegen bereits im Speicher des Route-Handlers.
+2. **Kein State-Dependency-Problem**: Das Frontend braucht keinen zweiten State zu kennen oder zu laden.
+3. **Konsistenz**: Der Planning-ReadModel ist der Single Source of Truth für alles was die Planning-Page braucht — Kategorien gehören dazu, sobald CRUD-Formulare vorhanden sind.
+4. **Zukunftssicher**: Baustein 5 (Income-CRUD) und Baustein 6 (Rule-CRUD) brauchen die Member-Liste — diese ist bereits als `incomes[].memberId/memberName` im ReadModel enthalten. Das `categories`-Feld folgt demselben Prinzip.
+
+## Implementierte Änderungen
+
+### Backend (`src/routes/planning.ts`)
+- `categories` wird dem Response-Objekt hinzugefügt
+- Datenquelle: `allCategories` (bereits durch `Category.find({ accountId })` geladen)
+- Format: `Array<{ id: string; name: string | null }>`
+
+### Frontend (`planning.models.ts`)
+- `AccountPlanningResponse` um `categories: Array<{ id: string; name: string | null }>` erweitert
+
+### Frontend (`state/planning.selectors.ts`)
+- Neuer Selector `PlanningPageSelectors.categories` gibt `vm.categories ?? []` zurück
+
+## Verwendung
+
+Im Budget-Editor-Sidebar (Baustein 4):
+```ts
+protected readonly categories = select(PlanningPageSelectors.categories);
+// → p-select [options]="categories()" optionLabel="name" optionValue="id"
+```

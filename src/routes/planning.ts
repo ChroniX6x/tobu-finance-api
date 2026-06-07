@@ -416,6 +416,10 @@ r.get("/:accountId/planning", validateQuery(QueryPlanning), async (req, res) => 
       memberDuePreview,
     },
     hints,
+    categories: allCategories.map((c: { _id: unknown; name?: string | null }) => ({
+      id: String(c._id),
+      name: c.name ?? null,
+    })),
   });
 });
 
